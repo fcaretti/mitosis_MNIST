@@ -1,6 +1,6 @@
 # mitosis_MNIST
 
-##In progress
+## In progress
 
 This is the code written for a further study of the phenomenon of Mitosis Transition [1].
 pMNIST_N_training allows to create an ensemble of network of a certain depth and width.
