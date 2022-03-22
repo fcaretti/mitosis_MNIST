@@ -10,8 +10,9 @@ import random
 from collections import OrderedDict
 import math
 import argparse
+import pickle
 from utils_MNIST import fully_connected_new,PCA,create_pMNIST_PCA_dataset
-
+#python pMNIST_N_training.py 512 5 10 500 5 1e-3 10000 128
 parser = argparse.ArgumentParser()
 parser.add_argument("W", help="width of the network to train",
                     type=int)
@@ -24,16 +25,8 @@ parser.add_argument("weight_decay",help="weight decay", type=float, default=1e-3
 parser.add_argument("sample_size", help="size of the training set, 60000 max", type=int, default=10000)
 parser.add_argument("batch_size", help="bathc size during training", type=int, default=128)
 args = parser.parse_args()
-text_file = open(f'MNIST_{args.depth}_layer_{args.W}_wd_{args.weight_decay}_inputdim_{args.input_dim}_training_parsed.txt', 'w')
+text_file = open(f'./logs/MNIST_{args.depth}_layer_{args.W}_wd_{args.weight_decay}_inputdim_{args.input_dim}_training_parsed.txt', 'w')
 
-'''modules = []
-modules.append(nn.Linear(28*28, args.W))
-modules.append(torch.nn.ReLU())
-for i in range(args.depth-2):
-    modules.append(nn.Linear(args.W, args.W))
-    modules.append(torch.nn.ReLU())
-modules.append(nn.Linear(args.W,1))
-big_net = nn.Sequential(*modules)'''
 
 
 transform = transforms.Compose(
@@ -49,9 +42,14 @@ testset = torchvision.datasets.MNIST(root='./data', train=False,
 input_dim=args.input_dim
 if input_dim != 784:
     trainset,testset=PCA(trainset,testset,784,input_dim)
+print("Finished PCA")
+torch.save(trainset, f'./data/trainset_dim_{input_dim}.pt')
+torch.save(testset, f'./data/testset_dim_{input_dim}.pt')
+print('Finished saving dataset')
+#with open(f'testset_dim_{input_dim}.pickle', 'wb') as f:
+    #pickle.dump(testset, f)
 #create_pMNIST_PCA_dataset(trainset, testset, 784, args.input_dim)
 #trainset=torch.open(f'./data/MNIST_PCA_{final_dim}_train')
-print("Finished PCA")
 trainset = list(trainset)
 for i in range(len(trainset)):
     trainset[i] = list(trainset[i])
@@ -154,6 +152,6 @@ plt.plot(train_counter, train_losses, color='blue')
 plt.legend(['Train Loss'], loc='upper right')
 plt.xlabel('number of training examples seen')
 plt.ylabel('training loss')
-plt.savefig(f'pMNIST_{args.depth}_layer_{args.W}_inputdim_{args.input_dim}_training_loss')
+plt.savefig(f'./training_losses_plots/pMNIST_{args.depth}_layer_{args.W}_inputdim_{args.input_dim}_training_loss')
 
 text_file.close()
