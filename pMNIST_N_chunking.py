@@ -11,7 +11,7 @@ from collections import OrderedDict
 import math
 import argparse
 from utils_MNIST import chunked_net, fully_connected_new, gen, PCA
-
+#python pMNIST_N_chunking.py 512 5 10 5 1e-3 10
 parser = argparse.ArgumentParser()
 parser.add_argument("W", help="width of the network to train",
                     type=int)
@@ -30,23 +30,32 @@ input_dim=args.input_dim
 number_nets=args.ensemble_size
 wd=args.weight_decay
 N_samples=args.N_samples
-text_file = open(f'MNIST_{depth}_layer_{W}_chunks_{input_dim}_inputdim_parsed.txt', 'w')
+text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_{wd}_wd_{input_dim}_inputdim_parsed.txt', 'w')
 criterion = nn.BCEWithLogitsLoss()
 criterion2= nn.BCELoss()
 
 
 
-transform = transforms.Compose(
+'''transform = transforms.Compose(
     [transforms.ToTensor(),
      transforms.Normalize(0.5, 0.5)])
 trainset=torchvision.datasets.MNIST(root='./data', train=True,
                                      download=True, transform=transform)
 testset = torchvision.datasets.MNIST(root='./data', train=False,
                                      download=True, transform=transform)
-
+print(trainset[0])
 if input_dim != 784:
     trainset,testset=PCA(trainset,testset,784,input_dim)
+print(trainset[0])'''
 
+if input_dim==784:
+    transform = transforms.Compose(
+        [transforms.ToTensor(),
+         transforms.Normalize(0.5, 0.5)])
+    testset = torchvision.datasets.MNIST(root='./data', train=False,
+                                         download=True, transform=transform)
+if input_dim!=784:
+    testset = torch.load(f'./data/testset_dim_{input_dim}.pt')
 testset = list(testset)
 for i in range(len(testset)):
     testset[i] = list(testset[i])
@@ -138,7 +147,6 @@ acc_errors=[]
 
 #***Iterate on chunk sizes, and take average of accuracies and losses for each chunk size***
 for chunk_size in sizes:
-
     small_net = chunked_net(W,chunk_size, depth,input_dim)
     #print(small_net)
 
@@ -147,10 +155,6 @@ for chunk_size in sizes:
     for i in range(0,number_nets):
         PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i+1}_parsed_wd_{wd}_inputdim_{input_dim}.pth'
         weights_dict = torch.load(PATH)
-        #print(weights_dict.keys())
-        '''old_weights_A = list(weights_dict[f'linear_body.{depth-1}.weight'])
-        old_weights_B = list(weights_dict[f'linear_body.{depth-1}.bias'])
-        old_weights_C=torch.transpose(weights_dict['linear_out.weight'], 0, 1)'''
         old_weights_A = list(weights_dict.items())[-4][1]
         old_weights_B = list(weights_dict.items())[-3][1]
         old_weights_C = torch.transpose(list(weights_dict.items())[-2][1],0,1)
