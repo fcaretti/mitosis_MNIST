@@ -12,6 +12,7 @@ import math
 import argparse
 from utils_MNIST import chunked_net, fully_connected_new, gen, PCA
 #python pMNIST_N_chunking.py 512 5 10 5 1e-3 10
+
 parser = argparse.ArgumentParser()
 parser.add_argument("W", help="width of the network to train",
                     type=int)
@@ -162,6 +163,8 @@ for chunk_size in sizes:
             #generator of batch_size numbers out of W
             random_positions=sorted((random.sample(range(W), chunk_size)))
             new_weights_A=torch.empty(chunk_size,W)
+            if depth==2:
+                new_weights_A = torch.empty(chunk_size, input_dim)
             new_weights_B=torch.empty(chunk_size)
             new_weights_C=torch.empty(chunk_size,1)
             j=0
@@ -229,7 +232,7 @@ ax.set_yscale('log')
 ax.set_xscale('log')
 plt.xlabel('chunks width')
 plt.ylabel('error-error_inf')
-plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_inputdim_{input_dim}_error.png')
+plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_wd_{wd}_inputdim_{input_dim}_error.png')
 
 
 
