@@ -217,9 +217,9 @@ ax = plt.gca()
 arr1 = np.array(sizes)
 arr5 = np.array(accuracies)
 arr5=accuracy_inf-arr5
-with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}.npy', 'wb') as f:
+with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}_wd_{wd}.npy', 'wb') as f:
     np.save(f, arr1)
-with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}.npy', 'wb') as f:
+with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}_wd_{wd}.npy', 'wb') as f:
     np.save(f, arr5)
 ax.errorbar(arr1, arr5,yerr=acc_errors,fmt="bo")
 ax.set_xlim([2,1.2*W])
