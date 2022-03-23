@@ -13,6 +13,7 @@ import argparse
 import pickle
 from utils_MNIST import fully_connected_new,PCA,create_pMNIST_PCA_dataset
 #python pMNIST_N_training.py 512 5 10 500 5 1e-3 10000 128
+#python pMNIST_N_training.py 2048 2 784 500 5 1e-4 10000 128
 parser = argparse.ArgumentParser()
 parser.add_argument("W", help="width of the network to train",
                     type=int)
@@ -41,11 +42,19 @@ testset = torchvision.datasets.MNIST(root='./data', train=False,
 
 input_dim=args.input_dim
 if input_dim != 784:
-    trainset,testset=PCA(trainset,testset,784,input_dim)
-print("Finished PCA")
-torch.save(trainset, f'./data/trainset_dim_{input_dim}.pt')
-torch.save(testset, f'./data/testset_dim_{input_dim}.pt')
-print('Finished saving dataset')
+    try:
+        trainset = torch.load(f'./data/trainset_dim_{input_dim}.pt')
+        testset = torch.load(f'./data/testset_dim_{input_dim}.pt')
+        print('Loaded dataset')
+    except IOError:
+        trainset,testset=PCA(trainset,testset,784,input_dim)
+        torch.save(trainset, f'./data/trainset_dim_{input_dim}.pt')
+        torch.save(testset, f'./data/testset_dim_{input_dim}.pt')
+        print('Saved Dataset')
+
+    #trainset,testset=PCA(trainset,testset,784,input_dim)
+    #torch.save(trainset, f'./data/trainset_dim_{input_dim}.pt')
+    #torch.save(testset, f'./data/testset_dim_{input_dim}.pt')
 #with open(f'testset_dim_{input_dim}.pickle', 'wb') as f:
     #pickle.dump(testset, f)
 #create_pMNIST_PCA_dataset(trainset, testset, 784, args.input_dim)
