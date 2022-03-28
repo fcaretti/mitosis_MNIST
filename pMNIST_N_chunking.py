@@ -137,8 +137,9 @@ sizes=list(gen(int(math.log(W,2))-1))
 
 sizes.append(sizes[-1]-sizes[-3])
 sizes.append(sizes[-3]-sizes[-5])
-#for i in range(round(W/4+1),round(W/2-1)):
-#    if i%4==2:
+
+#for i in range(round(W/16+1),round(W/4-1)):
+#    if (i%8==0 and i!=(W/8)):
 #        sizes.append(i)
 #print(sizes)
 sizes.sort()
@@ -230,8 +231,9 @@ y=a*x**(-0.5)
 ax.plot(x,y,label='w^(-0.5)')
 ax.set_yscale('log')
 ax.set_xscale('log')
+ax.set_title(f'FCN{depth} of depth {depth}, input dimension={input_dim} and wd={wd}')
 plt.xlabel('chunks width')
-plt.ylabel('error-error_inf')
+plt.ylabel('$\Delta error$')
 plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_wd_{wd}_inputdim_{input_dim}_error.png')
 
 

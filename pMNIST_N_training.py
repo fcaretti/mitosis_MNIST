@@ -15,6 +15,7 @@ from utils_MNIST import fully_connected_new,PCA,create_pMNIST_PCA_dataset
 #python pMNIST_N_training.py 512 5 10 500 5 1e-3 10000 128
 #python pMNIST_N_training.py 2048 2 784 500 5 1e-4 10000 128
 parser = argparse.ArgumentParser()
+
 parser.add_argument("W", help="width of the network to train",
                     type=int)
 parser.add_argument("depth", help= "depth of the network to train",
@@ -24,7 +25,8 @@ parser.add_argument("n_epochs", help="number of epochs of training", type=int, d
 parser.add_argument("ensemble_size", help="how many networks to train to evaluate the limit error", type=int, default=5)
 parser.add_argument("weight_decay",help="weight decay", type=float, default=1e-3)
 parser.add_argument("sample_size", help="size of the training set, 60000 max", type=int, default=10000)
-parser.add_argument("batch_size", help="bathc size during training", type=int, default=128)
+parser.add_argument("batch_size", help="batch size during training", type=int, default=128)
+
 args = parser.parse_args()
 text_file = open(f'./logs/MNIST_{args.depth}_layer_{args.W}_wd_{args.weight_decay}_inputdim_{args.input_dim}_training_parsed.txt', 'w')
 
@@ -41,92 +43,64 @@ testset = torchvision.datasets.MNIST(root='./data', train=False,
 # Here we just convert MNIST into parity MNIST
 
 input_dim=args.input_dim
-if input_dim != 784:
+if input_dim !=784:
     try:
-        trainset = torch.load(f'./data/trainset_dim_{input_dim}.pt')
-        testset = torch.load(f'./data/testset_dim_{input_dim}.pt')
-        print('Loaded dataset')
+        trainset=torch.load(f'./data/MNIST_PCA_{input_dim}_train.pt')
+        testset=torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
+        print("Loaded dataset")
     except IOError:
-        trainset,testset=PCA(trainset,testset,784,input_dim)
-        torch.save(trainset, f'./data/trainset_dim_{input_dim}.pt')
-        torch.save(testset, f'./data/testset_dim_{input_dim}.pt')
-        print('Saved Dataset')
+        create_pMNIST_PCA_dataset(trainset,testset,784,input_dim)
+        trainset=torch.load(f'./data/MNIST_PCA_{input_dim}_train.pt')
+        testset=torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
+        print("Saved dataset")
 
-    #trainset,testset=PCA(trainset,testset,784,input_dim)
-    #torch.save(trainset, f'./data/trainset_dim_{input_dim}.pt')
-    #torch.save(testset, f'./data/testset_dim_{input_dim}.pt')
-#with open(f'testset_dim_{input_dim}.pickle', 'wb') as f:
-    #pickle.dump(testset, f)
-#create_pMNIST_PCA_dataset(trainset, testset, 784, args.input_dim)
-#trainset=torch.open(f'./data/MNIST_PCA_{final_dim}_train')
-trainset = list(trainset)
-for i in range(len(trainset)):
-    trainset[i] = list(trainset[i])
 
-for i in range(0, 60000):
-    if trainset[i][1] % 2 == 0:
-        trainset[i][1] = 0
-    else:
-        trainset[i][1] = 1
+if args.sample_size!=60000:
+    random_list=random.sample(range(60000), args.sample_size)
+    trainset=torch.utils.data.Subset(trainset,random_list)
 
-for i in range(len(trainset)):
-    trainset[i] = tuple(trainset[i])
-trainset = tuple(trainset)
-trainset = trainset[:args.sample_size]
+
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
                                           shuffle=True, num_workers=2)
 trainloader2 = torch.utils.data.DataLoader(trainset, batch_size=args.sample_size,
                                            shuffle=False, num_workers=2)
-
-testset = list(testset)
-for i in range(len(testset)):
-    testset[i] = list(testset[i])
-
-for i in range(0, len(testset)):
-    if testset[i][1] % 2 == 0:
-        testset[i][1] = 0
-
-    else:
-        testset[i][1] = 1
-testset = tuple(testset)
-
 testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset),
                                          shuffle=False, num_workers=2)
 
 criterion = nn.BCEWithLogitsLoss()
 criterion2= nn.BCELoss()
 
-
 total_outputs=torch.zeros(len(testset))
+
 for k in range(args.ensemble_size):
     big_net = fully_connected_new(args.W, depth=args.depth, input_size=input_dim, output_size=1,
                                 dropout=False, batch_norm=False, orthog_init=True)
-    #print(big_net)
-    #optimizer = optim.SGD(big_net.parameters(), lr=0.001,momentum=0.9, weight_decay=args.weight_decay)
-    optimizer = optim.Adam(big_net.parameters(), lr=0.001, weight_decay=args.weight_decay)
+    optimizer = optim.SGD(big_net.parameters(), lr=0.001,momentum=0.9, weight_decay=args.weight_decay)
+    #optimizer = optim.Adam(big_net.parameters(), lr=0.001, weight_decay=args.weight_decay)
     train_losses = []
     test_losses=[]
     train_counter=[]
     counter=0
     for epoch in range(args.n_epochs):  # loop over the dataset multiple times
         running_loss = 0.0
+        correct=0
         for i, data in enumerate(trainloader, 0):
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
             # zero the parameter gradients
             optimizer.zero_grad()
-
             # forward + backward + optimize
             outputs = big_net(inputs)
             outputs = torch.squeeze(outputs)
-            #print(outputs)
             loss = criterion(outputs.to(torch.float32), labels.to(torch.float32))
+            predicted = torch.round(torch.sigmoid(outputs))
+            correct += (predicted == labels).sum().item()
             loss.backward()
             optimizer.step()
 
             # print statistics
             running_loss += loss.item()
-            if i%35 == 34:
+            '''if i%35 == 34:
                 predicted = torch.round(torch.sigmoid(outputs))
                 correct = (predicted == labels).sum().item()
                 print(f'[{epoch + 1}, {i +1:5d}] loss: {running_loss / (i):.3f}', file = text_file)
@@ -134,7 +108,16 @@ for k in range(args.ensemble_size):
                 train_losses.append(running_loss)
                 train_counter.append(counter)
                 counter=counter+1
-                running_loss = 0.0
+                running_loss = 0.0'''
+        running_loss=running_loss/args.sample_size
+        correct=correct/args.sample_size
+        print(f'[{epoch + 1}] loss: {running_loss :.3f}', file=text_file)
+        print(f'[{epoch + 1}] accuracy: {100 * correct :.3f}%', file=text_file)
+        train_losses.append(running_loss)
+        train_counter.append(counter)
+        counter = counter + 1
+        running_loss = 0.0
+        correct=0
     print('Finished Training')
     correct = 0
     total = 0
