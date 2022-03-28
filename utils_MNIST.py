@@ -97,10 +97,10 @@ def gen(x):
 
 def create_pMNIST_PCA_dataset(trainset, testset, init_dim, final_dim):
     x_train, x_test,y_train,y_test= PCA_for_dataset(trainset, testset, init_dim, final_dim)
-    train_dataset=pMNISTDataSet(x_train,y_train,final_dim)
-    test_dataset = pMNISTDataSet(x_test, y_test, final_dim)
-    torch.save(train_dataset, f'./data/MNIST_PCA_{final_dim}_train')
-    torch.save(test_dataset, f'./data/MNIST_PCA_{final_dim}_test')
+    train_dataset=pMNISTDataSet(x_train,y_train,final_dim,'binary')
+    test_dataset = pMNISTDataSet(x_test, y_test, final_dim,'binary')
+    torch.save(train_dataset, f'./data/MNIST_PCA_{final_dim}_train.pt')
+    torch.save(test_dataset, f'./data/MNIST_PCA_{final_dim}_test.pt')
 
 
 def PCA(trainset, testset, init_dim, final_dim):
@@ -161,33 +161,35 @@ def PCA_for_dataset(trainset, testset, init_dim, final_dim):
     U, S, V = torch.pca_lowrank(b, q=max_dim, center=False, niter=4)
     post_PCA_tensor=torch.matmul(b,V[:, :(final_dim)])
     post_PCA_train,post_PCA_test=torch.split(post_PCA_tensor,[len(trainset),len(testset)])
-    return post_PCA_train,post_PCA_test,y_train,y_test
+    return post_PCA_train,post_PCA_test,np.asarray(y_train),np.asarray(y_test)
 
 class pMNISTDataSet(torch.utils.data.Dataset):
     # images df, labels df, transforms
     # uses labels to determine if it needs to return X & y or just X in __getitem__
-    def __init__(self, images, labels, dimensions,transforms=None):
+    def __init__(self, images, labels, dimension,classification='multi',transforms=None):
         self.X = images
-        self.y = labels
-        self.dimensions=dimensions
+        if classification=='binary':
+            self.y=labels % 2
+        else:
+            self.y = labels
+        self.dimension=dimension
         self.transforms = transforms
 
     def __len__(self):
         return len(self.X)
 
-    def __getitem__(self, i):
-        data = self.X.iloc[i, :]  # gets the row
+    def __getitem__(self, idx):
+        #data = self.X.iloc[i, :]  # gets the row
         # reshape the row into the image size
         # (numpy arrays have the color channels dim last)
-        data = np.array(data).astype(np.uint8).reshape(28, 28, 1)
-
+        #data = np.array(data).astype(np.uint8).reshape(dimension, 1)
+        image=self.X[idx]
         # perform transforms if there are any
         if self.transforms:
-            data = self.transforms(data)
-
+            image = self.transforms(image)
         # if !test_set return the label as well, otherwise don't
         if self.y is not None:  # train/val
-            return (data, self.y[i])
+            return (image, self.y[idx])
         else:  # test
             return data
 
