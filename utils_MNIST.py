@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from torch import Tensor
 
 
 class chunked_net(nn.Module):
@@ -168,10 +169,7 @@ class pMNISTDataSet(torch.utils.data.Dataset):
     # uses labels to determine if it needs to return X & y or just X in __getitem__
     def __init__(self, images, labels, dimension,classification='multi',transforms=None):
         self.X = images
-        if classification=='binary':
-            self.y=labels % 2
-        else:
-            self.y = labels
+        self.y = labels
         self.dimension=dimension
         self.transforms = transforms
 
@@ -193,145 +191,10 @@ class pMNISTDataSet(torch.utils.data.Dataset):
         else:  # test
             return data
 
+class make_binary(torch.nn.Module):
+    def __init__(self, inplace=False):
+        super().__init__()
+        self.inplace = inplace
+    def forward(self, tensor: Tensor) -> Tensor:
+        return tensor%2
 
-class Net5(nn.Module):
-    W = 512
-    #so init defines the "architecture" of the net, while forward defines the algorithm
-    #the backward algorithm is automatically computed using the forward algorithm
-    def __init__(self):
-        W=512
-        super(Net5, self).__init__()
-        # an affine operation: y = Wx + b
-        self.fc1 = nn.Linear(28*28, W)  # 5*5 from image dimension
-        self.fc2 = nn.Linear(W,W)
-        self.fc3 = nn.Linear(W,W)
-        self.fc4 = nn.Linear(W,W)
-        #linear sarebbe la classica operazione, in questo caso con 120 neuroni nel layer?
-        self.fc5 = nn.Linear(W, 1)
-
-    def forward(self, x):
-        x = torch.flatten(x, 1) # flatten all dimensions except the batch dimension
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = F.relu(self.fc4(x))
-        x = self.fc5(x)
-        return x
-
-class Net4(nn.Module):
-    #so init defines the "architecture" of the net, while forward defines the algorithm
-    #the backward algorithm is automatically computed using the forward algorithm
-    def __init__(self):
-        W = 512
-        super(Net4, self).__init__()
-        # an affine operation: y = Wx + b
-        self.fc1 = nn.Linear(28*28, W)  # 5*5 from image dimension
-        self.fc2 = nn.Linear(W,W)
-        self.fc3 = nn.Linear(W,W)
-        #linear sarebbe la classica operazione, in questo caso con 120 neuroni nel layer?
-        self.fc4 = nn.Linear(W, 1)
-
-    def forward(self, x):
-        x = torch.flatten(x, 1) # flatten all dimensions except the batch dimension
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = self.fc4(x)
-        return x
-
-class Net3(nn.Module):
-    #so init defines the "architecture" of the net, while forward defines the algorithm
-    #the backward algorithm is automatically computed using the forward algorithm
-    def __init__(self):
-        W = 1024
-        super(Net3, self).__init__()
-        # an affine operation: y = Wx + b
-        self.fc1 = nn.Linear(28*28, W)  # 5*5 from image dimension
-        self.fc2 = nn.Linear(W,W)
-        #linear sarebbe la classica operazione, in questo caso con 120 neuroni nel layer?
-        self.fc3 = nn.Linear(W, 1)
-
-    def forward(self, x):
-        x = torch.flatten(x, 1) # flatten all dimensions except the batch dimension
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
-
-class Net2(nn.Module):
-    #so init defines the "architecture" of the net, while forward defines the algorithm
-    #the backward algorithm is automatically computed using the forward algorithm
-    def __init__(self):
-        W = 2048
-        super(Net2, self).__init__()
-        # an affine operation: y = Wx + b
-        self.fc1 = nn.Linear(28*28, W)  # 5*5 from image dimension
-        #linear sarebbe la classica operazione, in questo caso con 120 neuroni nel layer?
-        self.fc2 = nn.Linear(W, 1)
-
-    def forward(self, x):
-        x = torch.flatten(x, 1) # flatten all dimensions except the batch dimension
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
-
-class Net10(nn.Module):
-    #so init defines the "architecture" of the net, while forward defines the algorithm
-    #the backward algorithm is automatically computed using the forward algorithm
-    def __init__(self):
-        W=256
-        super(Net10, self).__init__()
-        # an affine operation: y = Wx + b
-        self.fc1 = nn.Linear(28*28, W)  # 5*5 from image dimension
-        self.fc2 = nn.Linear(W,W)
-        self.fc3 = nn.Linear(W,W)
-        self.fc4 = nn.Linear(W,W)
-        self.fc5 = nn.Linear(W,W)
-        self.fc6 = nn.Linear(W,W)
-        self.fc7 = nn.Linear(W,W)
-        self.fc8 = nn.Linear(W,W)
-        self.fc9 = nn.Linear(W, W)
-        #linear sarebbe la classica operazione, in questo caso con 120 neuroni nel layer?
-        self.fc10 = nn.Linear(W, 1)
-
-    def forward(self, x):
-        x = torch.flatten(x, 1) # flatten all dimensions except the batch dimension
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = F.relu(self.fc4(x))
-        x = F.relu(self.fc5(x))
-        x = F.relu(self.fc6(x))
-        x = F.relu(self.fc7(x))
-        x = F.relu(self.fc8(x))
-        x = F.relu(self.fc9(x))
-        x = self.fc10(x)
-        return x
-
-class Net7(nn.Module):
-    W = 512
-    #so init defines the "architecture" of the net, while forward defines the algorithm
-    #the backward algorithm is automatically computed using the forward algorithm
-    def __init__(self):
-        W=512
-        super(Net7, self).__init__()
-        # an affine operation: y = Wx + b
-        self.fc1 = nn.Linear(28*28, W)  # 5*5 from image dimension
-        self.fc2 = nn.Linear(W,W)
-        self.fc3 = nn.Linear(W,W)
-        self.fc4 = nn.Linear(W,W)
-        self.fc5 = nn.Linear(W,W)
-        self.fc6 = nn.Linear(W,W)
-        #linear sarebbe la classica operazione, in questo caso con 120 neuroni nel layer?
-        self.fc7 = nn.Linear(W, 1)
-
-    def forward(self, x):
-        x = torch.flatten(x, 1) # flatten all dimensions except the batch dimension
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = F.relu(self.fc4(x))
-        x = F.relu(self.fc5(x))
-        x = F.relu(self.fc6(x))
-        x = self.fc7(x)
-        return x

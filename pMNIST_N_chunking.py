@@ -10,7 +10,7 @@ import random
 from collections import OrderedDict
 import math
 import argparse
-from utils_MNIST import chunked_net, fully_connected_new, gen, PCA
+from utils_MNIST import fully_connected_new, gen, PCA, make_binary
 #python pMNIST_N_chunking.py 512 5 10 5 1e-3 10
 
 parser = argparse.ArgumentParser()
@@ -37,37 +37,16 @@ criterion2= nn.BCELoss()
 
 
 
-'''transform = transforms.Compose(
-    [transforms.ToTensor(),
-     transforms.Normalize(0.5, 0.5)])
-trainset=torchvision.datasets.MNIST(root='./data', train=True,
-                                     download=True, transform=transform)
-testset = torchvision.datasets.MNIST(root='./data', train=False,
-                                     download=True, transform=transform)
-print(trainset[0])
-if input_dim != 784:
-    trainset,testset=PCA(trainset,testset,784,input_dim)
-print(trainset[0])'''
-
 if input_dim==784:
     transform = transforms.Compose(
         [transforms.ToTensor(),
          transforms.Normalize(0.5, 0.5)])
     testset = torchvision.datasets.MNIST(root='./data', train=False,
-                                         download=True, transform=transform)
+                                         download=True, transform=transform, target_transform=make_binary())
+
 if input_dim!=784:
     testset = torch.load(f'./data/testset_dim_{input_dim}.pt')
-testset = list(testset)
-for i in range(len(testset)):
-    testset[i] = list(testset[i])
 
-for i in range(0, len(testset)):
-    if testset[i][1] % 2 == 0:
-        testset[i][1] = 0
-
-    else:
-        testset[i][1] = 1
-testset = tuple(testset)
 
 testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset),
                                          shuffle=False, num_workers=2)
@@ -149,43 +128,18 @@ acc_errors=[]
 
 #***Iterate on chunk sizes, and take average of accuracies and losses for each chunk size***
 for chunk_size in sizes:
-    small_net = chunked_net(W,chunk_size, depth,input_dim)
-    #print(small_net)
-
     mean_loss=0
     accuracy_per_size=[]
     for i in range(0,number_nets):
         PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i+1}_parsed_wd_{wd}_inputdim_{input_dim}.pth'
         weights_dict = torch.load(PATH)
-        old_weights_A = list(weights_dict.items())[-4][1]
-        old_weights_B = list(weights_dict.items())[-3][1]
-        old_weights_C = torch.transpose(list(weights_dict.items())[-2][1],0,1)
+        original_tensor=weights_dict['linear_out.weight']
         for k in range(0, N_samples):
-            #generator of batch_size numbers out of W
-            random_positions=sorted((random.sample(range(W), chunk_size)))
-            new_weights_A=torch.empty(chunk_size,W)
-            if depth==2:
-                new_weights_A = torch.empty(chunk_size, input_dim)
-            new_weights_B=torch.empty(chunk_size)
-            new_weights_C=torch.empty(chunk_size,1)
-            j=0
-            for i in random_positions:
-                new_weights_A[j]=old_weights_A[i]
-                new_weights_B[j]=old_weights_B[i]
-                new_weights_C[j]=old_weights_C[i]
-                j=j+1
-            new_weights_C=torch.transpose(new_weights_C,0,1)
-            #nw2=torch.Tensor(new_weights_2)
-            weights_dict_1=OrderedDict()
-
-            for i in range(len(list(weights_dict.items()))-4):
-                weights_dict_1[list(weights_dict.items())[i][0]] = list(weights_dict.items())[i][1]
-            weights_dict_1[list(weights_dict.items())[-4][0]]=new_weights_A
-            weights_dict_1[list(weights_dict.items())[-3][0]]=new_weights_B
-            weights_dict_1[list(weights_dict.items())[-2][0]]=new_weights_C
-            weights_dict_1['linear_out.bias']=weights_dict['linear_out.bias']
-
-            small_net.load_state_dict(weights_dict_1)
+            mask=torch.cat((torch.ones(W-chunk_size),torch.zeros(chunk_size)),0)
+            mask = mask.view(-1)[torch.randperm(W)].view(mask.size())
+            mask=torch.t(mask.ge(0.5))
+            big_net.load_state_dict(weights_dict)
+            weights_dict['linear_out.weight']=original_tensor.masked_fill(mask,0)
             correct = 0
             total = 0
             chunk_loss=0
@@ -194,7 +148,7 @@ for chunk_size in sizes:
                 for data in testloader:
                     images, labels = data
                     # calculate outputs by running images through the network
-                    outputs = small_net(images)
+                    outputs = big_net(images)
                     # round to zero or one for the prediction
                     predicted=torch.transpose(torch.round(torch.sigmoid(outputs)),0,1)
                     total += labels.size(0)

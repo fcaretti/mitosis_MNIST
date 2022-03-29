@@ -11,7 +11,7 @@ from collections import OrderedDict
 import math
 import argparse
 import pickle
-from utils_MNIST import fully_connected_new,PCA,create_pMNIST_PCA_dataset
+from utils_MNIST import fully_connected_new,PCA,create_pMNIST_PCA_dataset, make_binary
 #python pMNIST_N_training.py 512 5 10 500 5 1e-3 10000 128
 #python pMNIST_N_training.py 2048 2 784 500 5 1e-4 10000 128
 parser = argparse.ArgumentParser()
@@ -37,9 +37,9 @@ transform = transforms.Compose(
      transforms.Normalize(0.5, 0.5)])
 
 trainset = torchvision.datasets.MNIST(root='./data', train=True,
-                                      download=True, transform=transform)
+                                      download=True, transform=transform,target_transform=make_binary())
 testset = torchvision.datasets.MNIST(root='./data', train=False,
-                                     download=True, transform=transform)
+                                     download=True, transform=transform,target_transform=make_binary())
 # Here we just convert MNIST into parity MNIST
 
 input_dim=args.input_dim
