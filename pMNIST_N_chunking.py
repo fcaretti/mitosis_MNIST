@@ -20,6 +20,7 @@ parser.add_argument("depth", help= "depth of the network to train",
                     type=int)
 parser.add_argument("input_dim", help="size of the input, modified by PCA", type=int, default=784)
 parser.add_argument("ensemble_size", help="how many networks to average the chunks over", type=int, default=5)
+parser.add_argument("learning_rate", help="learning rate used for the network used during training", type=float, default=1e-3)
 parser.add_argument("weight_decay", help="weight decay used for the network used during training", type=float, default= 1e-3)
 parser.add_argument("N_samples", help="number of samples for each chunk size and for each network", type=int, default=10)
 args = parser.parse_args()
@@ -29,9 +30,10 @@ W=args.W
 depth=args.depth
 input_dim=args.input_dim
 number_nets=args.ensemble_size
+lr=args.learning_rate
 wd=args.weight_decay
 N_samples=args.N_samples
-text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_{wd}_wd_{input_dim}_inputdim_parsed.txt', 'w')
+text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_{wd}_lr_{lr}_wd_{input_dim}_inputdim.txt', 'w')
 criterion = nn.BCEWithLogitsLoss()
 criterion2= nn.BCELoss()
 
@@ -58,7 +60,7 @@ total_maj_outputs=torch.zeros(len(testset))
 
 for i in range(0,number_nets):
     print(f'Starting test of network # {i+1}')
-    PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i + 1}_parsed_wd_{wd}_inputdim_{input_dim}.pth'
+    PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
     weights_dict = torch.load(PATH)
     big_net = fully_connected_new(W, depth=depth, input_size=input_dim, output_size=1,
                                 dropout=False, batch_norm=False, orthog_init=False)
@@ -131,7 +133,7 @@ for chunk_size in sizes:
     mean_loss=0
     accuracy_per_size=[]
     for i in range(0,number_nets):
-        PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i+1}_parsed_wd_{wd}_inputdim_{input_dim}.pth'
+        PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i+1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
         weights_dict = torch.load(PATH)
         original_tensor=weights_dict['linear_out.weight']
         for k in range(0, N_samples):
@@ -164,23 +166,28 @@ for chunk_size in sizes:
     acc_errors.append(math.sqrt(sum([(number-mean) ** 2 for number in accuracy_per_size]))/(N_samples*number_nets-1))
     accuracies.append(mean)
     losses.append(mean_loss/N_samples/number_nets)
-    print(f'Finished chunk size = {chunk_size}')
+    print(f'Accuracy at chunk size= {chunk_size}: {mean}')
 
 
 fig = plt.figure()
 ax = plt.gca()
 arr1 = np.array(sizes)
 arr5 = np.array(accuracies)
+acc_errors=np.array(acc_errors)
 arr5=accuracy_inf-arr5
-with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}_wd_{wd}.npy', 'wb') as f:
+if arr5[-1]<0:
+    arr5=arr5[:-1]
+    arr1=arr1[:-1]
+    acc_errors=acc_errors[:-1]
+with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}.npy', 'wb') as f:
     np.save(f, arr1)
-with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}_wd_{wd}.npy', 'wb') as f:
+with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}.npy', 'wb') as f:
     np.save(f, arr5)
 ax.errorbar(arr1, arr5,yerr=acc_errors,fmt="bo")
 ax.set_xlim([2,1.2*W])
-x = np.linspace(2,1.2*W,1000)
+x = np.linspace(2,1.2*arr5[-1],1000)
 ax.set_ylim([0.8*arr5[-1],100])
-a=arr5[-1]/(W**(-0.5))
+a=arr5[-1]/(arr5[-1]**(-0.5))
 y=a*x**(-0.5)
 ax.plot(x,y,label='w^(-0.5)')
 ax.set_yscale('log')
