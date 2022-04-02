@@ -23,12 +23,14 @@ parser.add_argument("depth", help= "depth of the network to train",
 parser.add_argument("input_dim", help="input dimension, maximum 784", type=int, default=784)
 parser.add_argument("n_epochs", help="number of epochs of training", type=int, default= 500)
 parser.add_argument("ensemble_size", help="how many networks to train to evaluate the limit error", type=int, default=5)
+parser.add_argument("learning_rate", help="learning rate", type=float, default=1e-3)
 parser.add_argument("weight_decay",help="weight decay", type=float, default=1e-3)
 parser.add_argument("sample_size", help="size of the training set, 60000 max", type=int, default=10000)
 parser.add_argument("batch_size", help="batch size during training", type=int, default=128)
 
+
 args = parser.parse_args()
-text_file = open(f'./logs/MNIST_{args.depth}_layer_{args.W}_wd_{args.weight_decay}_inputdim_{args.input_dim}_training_parsed.txt', 'w')
+text_file = open(f'./logs/MNIST_{args.depth}_layer_{args.W}_lr_{args.learning_rate}_wd_{args.weight_decay}_inputdim_{args.input_dim}_training_parsed.txt', 'w')
 
 
 
@@ -75,7 +77,7 @@ total_outputs=torch.zeros(len(testset))
 for k in range(args.ensemble_size):
     big_net = fully_connected_new(args.W, depth=args.depth, input_size=input_dim, output_size=1,
                                 dropout=False, batch_norm=False, orthog_init=True)
-    optimizer = optim.SGD(big_net.parameters(), lr=0.001,momentum=0.9, weight_decay=args.weight_decay)
+    optimizer = optim.SGD(big_net.parameters(), lr=args.learning_rate,momentum=0.9, weight_decay=args.weight_decay)
     #optimizer = optim.Adam(big_net.parameters(), lr=0.001, weight_decay=args.weight_decay)
     train_losses = []
     test_losses=[]
@@ -100,15 +102,7 @@ for k in range(args.ensemble_size):
 
             # print statistics
             running_loss += loss.item()
-            '''if i%35 == 34:
-                predicted = torch.round(torch.sigmoid(outputs))
-                correct = (predicted == labels).sum().item()
-                print(f'[{epoch + 1}, {i +1:5d}] loss: {running_loss / (i):.3f}', file = text_file)
-                print(f'[{epoch + 1}, {i +1:5d}] accuracy: {100*correct / (args.batch_size):.3f}%', file = text_file)
-                train_losses.append(running_loss)
-                train_counter.append(counter)
-                counter=counter+1
-                running_loss = 0.0'''
+
         running_loss=running_loss/args.sample_size
         correct=correct/args.sample_size
         print(f'[{epoch + 1}] loss: {running_loss :.3f}', file=text_file)
@@ -137,7 +131,7 @@ for k in range(args.ensemble_size):
             train_loss += criterion(outputs.to(torch.float32), labels.to(torch.float32))
     print(f'Accuracy of the network on the {args.sample_size} training images: {100 * correct / total} %', file = text_file)
     print(f'Loss of the network on the {args.sample_size} training images: { train_loss} ', file = text_file)
-    torch.save(big_net.state_dict(), f'./nets/mnist_trained_{args.depth}_layer_{args.W}_net_{k+1}_parsed_wd_{args.weight_decay}_inputdim_{input_dim}.pth')
+    torch.save(big_net.state_dict(), f'./nets/mnist_trained_{args.depth}_layer_{args.W}_net_{k+1}_lr_{args.learning_rate}_wd_{args.weight_decay}_inputdim_{input_dim}.pth')
 
 fig = plt.figure()
 plt.plot(train_counter, train_losses, color='blue')
