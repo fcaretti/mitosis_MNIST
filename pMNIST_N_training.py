@@ -11,11 +11,11 @@ from collections import OrderedDict
 import math
 import argparse
 import pickle
-from utils_MNIST import fully_connected_new,PCA,create_pMNIST_PCA_dataset, make_binary
-#python pMNIST_N_training.py 512 5 10 500 5 1e-3 10000 128
-#python pMNIST_N_training.py 2048 2 784 500 5 1e-4 10000 128
-parser = argparse.ArgumentParser()
+from utils_MNIST import fully_connected_new,PCA,create_pMNIST_PCA_dataset, make_binary, create_XOR_dataset
 
+parser =argparse.ArgumentParser()
+
+parser.add_argument("dataset", help="which dataset to use, pMNIST or XOR? (or maybe other in the future")
 parser.add_argument("W", help="width of the network to train",
                     type=int)
 parser.add_argument("depth", help= "depth of the network to train",
@@ -27,40 +27,53 @@ parser.add_argument("learning_rate", help="learning rate", type=float, default=1
 parser.add_argument("weight_decay",help="weight decay", type=float, default=1e-3)
 parser.add_argument("sample_size", help="size of the training set, 60000 max", type=int, default=10000)
 parser.add_argument("batch_size", help="batch size during training", type=int, default=128)
+parser.add_argument("signal_noise_ratio", help="only useful with artificial data", type=float, default=1.)
+
 
 
 args = parser.parse_args()
-text_file = open(f'./logs/MNIST_{args.depth}_layer_{args.W}_lr_{args.learning_rate}_wd_{args.weight_decay}_inputdim_{args.input_dim}_training_parsed.txt', 'w')
+dataset=args.dataset
+signal_noise_ratio=args.signal_noise_ratio
+if dataset=='pMNIST':
+    text_file = open(f'./logs/MNIST_{args.depth}_layer_{args.W}_lr_{args.learning_rate}_wd_{args.weight_decay}_inputdim_{args.input_dim}_training_parsed.txt', 'w')
+if dataset=='XOR':
+    text_file = open(f'./logs/{dataset}_{signal_noise_ratio}_ratio_{args.depth}_layer_{args.W}_lr_{args.learning_rate}_wd_{args.weight_decay}_inputdim_{args.input_dim}_training_parsed.txt', 'w')
 
-
-
+input_dim=args.input_dim
 transform = transforms.Compose(
     [transforms.ToTensor(),
      transforms.Normalize(0.5, 0.5)])
+if dataset=='pMNIST':
+    trainset = torchvision.datasets.MNIST(root='./data', train=True,
+                                          download=True, transform=transform,target_transform=make_binary())
+    testset = torchvision.datasets.MNIST(root='./data', train=False,
+                                         download=True, transform=transform,target_transform=make_binary())
+    # Here we just convert MNIST into parity MNIST
 
-trainset = torchvision.datasets.MNIST(root='./data', train=True,
-                                      download=True, transform=transform,target_transform=make_binary())
-testset = torchvision.datasets.MNIST(root='./data', train=False,
-                                     download=True, transform=transform,target_transform=make_binary())
-# Here we just convert MNIST into parity MNIST
-
-input_dim=args.input_dim
-if input_dim !=784:
+    if input_dim !=784:
+        try:
+            trainset=torch.load(f'./data/MNIST_PCA_{input_dim}_train.pt')
+            testset=torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
+            print("Loaded dataset")
+        except IOError:
+            create_pMNIST_PCA_dataset(trainset,testset,784,input_dim)
+            trainset=torch.load(f'./data/MNIST_PCA_{input_dim}_train.pt')
+            testset=torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
+            print("Saved dataset")
+    if args.sample_size!=60000:
+        random_list=random.sample(range(60000), args.sample_size)
+        trainset=torch.utils.data.Subset(trainset,random_list)
+if dataset=='XOR':
     try:
-        trainset=torch.load(f'./data/MNIST_PCA_{input_dim}_train.pt')
-        testset=torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
-        print("Loaded dataset")
+        trainset=torch.load(f'./data/XOR_{input_dim}_dimension_{signal_noise_ratio}_ratio_train_{args.sample_size}_samples.pt')
+        testset=torch.load(f'./data/XOR_{input_dim}_dimension_{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
+        print('Loaded Dataset')
+
     except IOError:
-        create_pMNIST_PCA_dataset(trainset,testset,784,input_dim)
-        trainset=torch.load(f'./data/MNIST_PCA_{input_dim}_train.pt')
-        testset=torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
-        print("Saved dataset")
-
-
-if args.sample_size!=60000:
-    random_list=random.sample(range(60000), args.sample_size)
-    trainset=torch.utils.data.Subset(trainset,random_list)
-
+        create_XOR_dataset(args.sample_size,10000,input_dim,signal_noise_ratio)
+        print('Saved Dataset')
+        trainset = torch.load(f'./data/XOR_{input_dim}_dimension_{signal_noise_ratio}_ratio_train_{args.sample_size}_samples.pt')
+        testset = torch.load(f'./data/XOR_{input_dim}_dimension_{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
 
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
                                           shuffle=True, num_workers=2)
@@ -92,7 +105,7 @@ for k in range(args.ensemble_size):
             # zero the parameter gradients
             optimizer.zero_grad()
             # forward + backward + optimize
-            outputs = big_net(inputs)
+            outputs = big_net(inputs.float())
             outputs = torch.squeeze(outputs)
             loss = criterion(outputs.to(torch.float32), labels.to(torch.float32))
             predicted = torch.round(torch.sigmoid(outputs))
@@ -120,7 +133,7 @@ for k in range(args.ensemble_size):
     with torch.no_grad():
         for data in trainloader2:
             images, labels = data
-            outputs = big_net(images)
+            outputs = big_net(images.float())
             #for predictions, one must apply a sigmoid, that the BCElogitsloss does implicitly
             predicted = torch.transpose(torch.round(torch.sigmoid(outputs)),0,1)
             outputs= torch.squeeze(outputs)
@@ -131,13 +144,19 @@ for k in range(args.ensemble_size):
             train_loss += criterion(outputs.to(torch.float32), labels.to(torch.float32))
     print(f'Accuracy of the network on the {args.sample_size} training images: {100 * correct / total} %', file = text_file)
     print(f'Loss of the network on the {args.sample_size} training images: { train_loss} ', file = text_file)
-    torch.save(big_net.state_dict(), f'./nets/mnist_trained_{args.depth}_layer_{args.W}_net_{k+1}_lr_{args.learning_rate}_wd_{args.weight_decay}_inputdim_{input_dim}.pth')
+    if dataset=='pMNIST':
+        torch.save(big_net.state_dict(), f'./nets/{dataset}_trained_{args.depth}_layer_{args.W}_net_{k+1}_lr_{args.learning_rate}_wd_{args.weight_decay}_inputdim_{input_dim}.pth')
+    if dataset=='XOR':
+        torch.save(big_net.state_dict(),f'./nets/{dataset}_trained_{args.depth}_layer_{args.W}_net_{k + 1}_lr_{args.learning_rate}_wd_{args.weight_decay}_inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth')
 
 fig = plt.figure()
 plt.plot(train_counter, train_losses, color='blue')
 plt.legend(['Train Loss'], loc='upper right')
 plt.xlabel('number of training examples seen')
 plt.ylabel('training loss')
-plt.savefig(f'./training_losses_plots/pMNIST_{args.depth}_layer_{args.W}_inputdim_{args.input_dim}_training_loss')
-
+if dataset=='pMNIST':
+    plt.savefig(f'./training_losses_plots/{dataset}_{args.depth}_layer_{args.W}_inputdim_{args.input_dim}_training_loss.png')
+if dataset=='XOR':
+    plt.savefig(
+        f'./training_losses_plots/{dataset}_{args.depth}_layer_{args.W}_inputdim_{args.input_dim}_ratio_{signal_noise_ratio}_training_loss.png')
 text_file.close()
