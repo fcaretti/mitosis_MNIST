@@ -167,7 +167,7 @@ def PCA_for_dataset(trainset, testset, init_dim, final_dim):
 class pMNISTDataSet(torch.utils.data.Dataset):
     # images df, labels df, transforms
     # uses labels to determine if it needs to return X & y or just X in __getitem__
-    def __init__(self, images, labels, dimension,classification='multi',transforms=None):
+    def __init__(self, images, labels, dimension,transforms=None):
         self.X = images
         self.y = labels
         self.dimension=dimension
@@ -198,3 +198,24 @@ class make_binary(torch.nn.Module):
     def forward(self, tensor: Tensor) -> Tensor:
         return tensor%2
 
+def create_XOR_dataset(trainset_size, testset_size, input_dim,signal_noise_ratio):
+    dataset_size = trainset_size+testset_size
+    matrix_random = torch.normal(0, 1, (input_dim - 2, dataset_size))
+    matrix_model_1 = torch.normal(0.5, 0.5/signal_noise_ratio, (2, round(dataset_size / 4)))
+    matrix_model_2 = torch.normal(-0.5, 0.5/signal_noise_ratio, (2, round(dataset_size / 4)))
+    means_3 = torch.tensor(np.array([[0.5], [-0.5]])).repeat(1, round(dataset_size / 4))
+    means_4 = torch.tensor(np.array([[-0.5], [0.5]])).repeat(1, round(dataset_size / 4))
+    matrix_model_3 = torch.normal(means_3, 0.5/signal_noise_ratio)
+    matrix_model_4 = torch.normal(means_4, 0.5/signal_noise_ratio)
+    big_matrix = torch.cat((matrix_model_1, matrix_model_2, matrix_model_3, matrix_model_4), 1)
+    big_matrix = torch.cat((matrix_random, big_matrix), 0)
+    big_matrix = big_matrix[torch.randperm(input_dim)]
+    big_matrix = torch.transpose(big_matrix, 0, 1)
+    labels = torch.cat((torch.zeros(round(dataset_size / 2)), torch.ones(round(dataset_size / 2))), 0)
+    indexes=torch.randperm(dataset_size)
+    labels_dataset=labels[indexes]
+    X_dataset=big_matrix[indexes]
+    train_set = pMNISTDataSet(X_dataset[:trainset_size], labels_dataset[:trainset_size], input_dim)
+    test_set = pMNISTDataSet(X_dataset[trainset_size:], labels_dataset[trainset_size:], input_dim)
+    torch.save(train_set, f'./data/XOR_{input_dim}_dimension_{signal_noise_ratio}_ratio_train_{trainset_size}_samples.pt')
+    torch.save(test_set, f'./data/XOR_{input_dim}_dimension_{signal_noise_ratio}_ratio_test_{testset_size}_samples.pt')

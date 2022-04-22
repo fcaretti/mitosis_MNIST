@@ -11,9 +11,10 @@ from collections import OrderedDict
 import math
 import argparse
 from utils_MNIST import fully_connected_new, gen, PCA, make_binary
-#python pMNIST_N_chunking.py 512 5 10 5 1e-3 10
+
 
 parser = argparse.ArgumentParser()
+parser.add_argument("dataset", help="which dataset to use, pMNIST or XOR? (or maybe other in the future")
 parser.add_argument("W", help="width of the network to train",
                     type=int)
 parser.add_argument("depth", help= "depth of the network to train",
@@ -25,7 +26,7 @@ parser.add_argument("weight_decay", help="weight decay used for the network used
 parser.add_argument("N_samples", help="number of samples for each chunk size and for each network", type=int, default=10)
 args = parser.parse_args()
 
-
+dataset=args.dataset
 W=args.W
 depth=args.depth
 input_dim=args.input_dim
@@ -33,22 +34,25 @@ number_nets=args.ensemble_size
 lr=args.learning_rate
 wd=args.weight_decay
 N_samples=args.N_samples
-text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_{wd}_lr_{lr}_wd_{input_dim}_inputdim.txt', 'w')
+if dataset=='pMNIST':
+    text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_lr_{lr}_wd_{wd}_{input_dim}_inputdim.txt', 'w')
+if dataset=='XOR':
+    text_file = open(f'./logs/{dataset}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_{lr}_wd_{wd}_{input_dim}_inputdim.txt', 'w')
 criterion = nn.BCEWithLogitsLoss()
 criterion2= nn.BCELoss()
 
 
+if dataset=='pMNIST':
+    if input_dim==784:
+        transform = transforms.Compose(
+            [transforms.ToTensor(),
+             transforms.Normalize(0.5, 0.5)])
+        testset = torchvision.datasets.MNIST(root='./data', train=False,
+                                             download=True, transform=transform, target_transform=make_binary())
+    if input_dim!=784:
+        testset = torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
 
-if input_dim==784:
-    transform = transforms.Compose(
-        [transforms.ToTensor(),
-         transforms.Normalize(0.5, 0.5)])
-    testset = torchvision.datasets.MNIST(root='./data', train=False,
-                                         download=True, transform=transform, target_transform=make_binary())
-
-if input_dim!=784:
-    testset = torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
-
+if dataset=='XOR':
 
 testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset),
                                          shuffle=False, num_workers=2)
@@ -60,7 +64,10 @@ total_maj_outputs=torch.zeros(len(testset))
 
 for i in range(0,number_nets):
     print(f'Starting test of network # {i+1}')
-    PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
+    if dataset=='pMNIST':
+        PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
+    if dataset=='XOR':
+        
     weights_dict = torch.load(PATH)
     big_net = fully_connected_new(W, depth=depth, input_size=input_dim, output_size=1,
                                 dropout=False, batch_norm=False, orthog_init=False)
