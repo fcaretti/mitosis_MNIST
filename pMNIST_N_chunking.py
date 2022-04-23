@@ -24,6 +24,8 @@ parser.add_argument("ensemble_size", help="how many networks to average the chun
 parser.add_argument("learning_rate", help="learning rate used for the network used during training", type=float, default=1e-3)
 parser.add_argument("weight_decay", help="weight decay used for the network used during training", type=float, default= 1e-3)
 parser.add_argument("N_samples", help="number of samples for each chunk size and for each network", type=int, default=10)
+parser.add_argument("signal_noise_ratio", help="only useful with artificial data", type=float, default=1.)
+
 args = parser.parse_args()
 
 dataset=args.dataset
@@ -34,6 +36,7 @@ number_nets=args.ensemble_size
 lr=args.learning_rate
 wd=args.weight_decay
 N_samples=args.N_samples
+signal_noise_ratio=args.signal_noise_ratio
 if dataset=='pMNIST':
     text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_lr_{lr}_wd_{wd}_{input_dim}_inputdim.txt', 'w')
 if dataset=='XOR':
@@ -53,7 +56,7 @@ if dataset=='pMNIST':
         testset = torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
 
 if dataset=='XOR':
-
+    testset = torch.load(f'./data/XOR_{input_dim}_dimension_{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
 testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset),
                                          shuffle=False, num_workers=2)
 correct = 0
@@ -67,7 +70,7 @@ for i in range(0,number_nets):
     if dataset=='pMNIST':
         PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
     if dataset=='XOR':
-        
+        PATH=f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
     weights_dict = torch.load(PATH)
     big_net = fully_connected_new(W, depth=depth, input_size=input_dim, output_size=1,
                                 dropout=False, batch_norm=False, orthog_init=False)
@@ -78,7 +81,7 @@ for i in range(0,number_nets):
     with torch.no_grad():
         for data in testloader:
             images, labels = data
-            outputs = big_net(images)
+            outputs = big_net(images.float())
             # for predictions, one must apply a sigmoid, that the BCElogitsloss does implicitly
             predicted = torch.transpose(torch.round(torch.sigmoid(outputs)), 0, 1)
             outputs = torch.squeeze(outputs)
@@ -140,7 +143,10 @@ for chunk_size in sizes:
     mean_loss=0
     accuracy_per_size=[]
     for i in range(0,number_nets):
-        PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i+1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
+        if dataset=='pMNIST':
+            PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i+1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
+        if dataset=='XOR':
+            PATH = f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
         weights_dict = torch.load(PATH)
         original_tensor=weights_dict['linear_out.weight']
         for k in range(0, N_samples):
@@ -157,7 +163,7 @@ for chunk_size in sizes:
                 for data in testloader:
                     images, labels = data
                     # calculate outputs by running images through the network
-                    outputs = big_net(images)
+                    outputs = big_net(images.float())
                     # round to zero or one for the prediction
                     predicted=torch.transpose(torch.round(torch.sigmoid(outputs)),0,1)
                     total += labels.size(0)
@@ -186,10 +192,16 @@ if arr5[-1]<0:
     arr5=arr5[:-1]
     arr1=arr1[:-1]
     acc_errors=acc_errors[:-1]
-with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}.npy', 'wb') as f:
-    np.save(f, arr1)
-with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}.npy', 'wb') as f:
-    np.save(f, arr5)
+if dataset=='pMNIST':
+    with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}.npy', 'wb') as f:
+        np.save(f, arr1)
+    with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}.npy', 'wb') as f:
+        np.save(f, arr5)
+if dataset=='XOR':
+    with open(f'./arrays/sizes_XOR_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
+        np.save(f, arr1)
+    with open(f'./arrays/error_XOR_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
+        np.save(f, arr5)
 ax.errorbar(arr1, arr5,yerr=acc_errors,fmt="bo")
 ax.set_xlim([2,1.2*W])
 x = np.linspace(2,1.2*arr5[-1],1000)
@@ -202,7 +214,10 @@ ax.set_xscale('log')
 ax.set_title(f'FCN of depth {depth}, input dimension={input_dim} and wd={wd}')
 plt.xlabel('chunks width')
 plt.ylabel('$\Delta error$')
-plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_wd_{wd}_inputdim_{input_dim}_error.png')
+if dataset=='pMNIST':
+    plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_wd_{wd}_inputdim_{input_dim}_error.png')
+if dataset=='XOR':
+    plt.savefig(f'./plots/XOR_{depth}_layer_{W}_wd_{wd}_inputdim_{input_dim}_ratio_{signal_noise_ratio}_error.png')
 
 
 
