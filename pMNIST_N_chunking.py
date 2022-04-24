@@ -68,7 +68,7 @@ total_maj_outputs=torch.zeros(len(testset))
 for i in range(0,number_nets):
     print(f'Starting test of network # {i+1}')
     if dataset=='pMNIST':
-        PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
+        PATH = f'./nets/pMNIST_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
     if dataset=='XOR':
         PATH=f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
     weights_dict = torch.load(PATH)
@@ -81,10 +81,13 @@ for i in range(0,number_nets):
     with torch.no_grad():
         for data in testloader:
             images, labels = data
+            print(images)
             outputs = big_net(images.float())
+            print(outputs)
             # for predictions, one must apply a sigmoid, that the BCElogitsloss does implicitly
             predicted = torch.transpose(torch.round(torch.sigmoid(outputs)), 0, 1)
             outputs = torch.squeeze(outputs)
+            print(outputs)
             # then we add the sigmoid of outputs to the average
             total_outputs.add_(torch.sigmoid(outputs))
             total_maj_outputs.add_(torch.squeeze(predicted))
@@ -144,7 +147,7 @@ for chunk_size in sizes:
     accuracy_per_size=[]
     for i in range(0,number_nets):
         if dataset=='pMNIST':
-            PATH = f'./nets/mnist_trained_{depth}_layer_{W}_net_{i+1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
+            PATH = f'./nets/pMNIST_trained_{depth}_layer_{W}_net_{i+1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
         if dataset=='XOR':
             PATH = f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
         weights_dict = torch.load(PATH)

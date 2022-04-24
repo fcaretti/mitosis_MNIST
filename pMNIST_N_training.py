@@ -30,7 +30,6 @@ parser.add_argument("batch_size", help="batch size during training", type=int, d
 parser.add_argument("signal_noise_ratio", help="only useful with artificial data", type=float, default=1.)
 
 
-
 args = parser.parse_args()
 dataset=args.dataset
 signal_noise_ratio=args.signal_noise_ratio
@@ -96,7 +95,11 @@ for k in range(args.ensemble_size):
     test_losses=[]
     train_counter=[]
     counter=0
-    for epoch in range(args.n_epochs):  # loop over the dataset multiple times
+    still_training=0
+    epoch=0
+    #for epoch in range(args.n_epochs):  # loop over the dataset multiple times
+    while still_training<5 and epoch<args.n_epochs:
+        epoch+=1
         running_loss = 0.0
         correct=0
         for i, data in enumerate(trainloader, 0):
@@ -105,27 +108,30 @@ for k in range(args.ensemble_size):
             # zero the parameter gradients
             optimizer.zero_grad()
             # forward + backward + optimize
-            outputs = big_net(inputs.float())
+            if dataset=='XOR':
+                outputs = big_net(inputs.float())
+            if dataset=='pMNIST':
+                outputs=big_net(inputs)
             outputs = torch.squeeze(outputs)
             loss = criterion(outputs.to(torch.float32), labels.to(torch.float32))
             predicted = torch.round(torch.sigmoid(outputs))
             correct += (predicted == labels).sum().item()
             loss.backward()
             optimizer.step()
-
             # print statistics
             running_loss += loss.item()
-
         running_loss=running_loss/args.sample_size
         correct=correct/args.sample_size
         print(f'[{epoch + 1}] loss: {running_loss :.3f}', file=text_file)
         print(f'[{epoch + 1}] accuracy: {100 * correct :.3f}%', file=text_file)
+        if correct==1:
+            still_training+=1
         train_losses.append(running_loss)
         train_counter.append(counter)
         counter = counter + 1
         running_loss = 0.0
         correct=0
-    print('Finished Training')
+    print(f'Finished Training in {epoch} epochs')
     correct = 0
     total = 0
     train_loss=0
@@ -133,7 +139,10 @@ for k in range(args.ensemble_size):
     with torch.no_grad():
         for data in trainloader2:
             images, labels = data
-            outputs = big_net(images.float())
+            if dataset == 'XOR':
+                outputs = big_net(images.float())
+            if dataset == 'pMNIST':
+                outputs = big_net(images)
             #for predictions, one must apply a sigmoid, that the BCElogitsloss does implicitly
             predicted = torch.transpose(torch.round(torch.sigmoid(outputs)),0,1)
             outputs= torch.squeeze(outputs)

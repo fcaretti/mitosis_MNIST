@@ -98,8 +98,10 @@ def gen(x):
 
 def create_pMNIST_PCA_dataset(trainset, testset, init_dim, final_dim):
     x_train, x_test,y_train,y_test= PCA_for_dataset(trainset, testset, init_dim, final_dim)
-    train_dataset=pMNISTDataSet(x_train,y_train,final_dim,'binary')
-    test_dataset = pMNISTDataSet(x_test, y_test, final_dim,'binary')
+    train_dataset=pMNISTDataSet(x_train,y_train,final_dim)
+    test_dataset = pMNISTDataSet(x_test, y_test, final_dim)
+    #train_dataset=pMNISTDataSet(x_train,y_train,final_dim,'binary')
+    #test_dataset = pMNISTDataSet(x_test, y_test, final_dim,'binary')
     torch.save(train_dataset, f'./data/MNIST_PCA_{final_dim}_train.pt')
     torch.save(test_dataset, f'./data/MNIST_PCA_{final_dim}_test.pt')
 
