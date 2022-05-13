@@ -10,21 +10,23 @@ import random
 from collections import OrderedDict
 import math
 import argparse
-from utils_MNIST import fully_connected_new, gen, PCA, make_binary
+from utils_MNIST import fully_connected_new, gen,  make_binary
 
+#example XOR: python pMNIST_N_chunking.py --dataset XOR --W 64 --depth 3 --input_dim 20 --ensemble_size 5 --learning_rate 1e-3 --weight_decay 1e-3 --N_samples 10 --signal_noise_ratio 1
 
 parser = argparse.ArgumentParser()
-parser.add_argument("dataset", help="which dataset to use, pMNIST or XOR? (or maybe other in the future")
-parser.add_argument("W", help="width of the network to train",
+parser.add_argument("--dataset", help="which dataset to use, pMNIST or XOR? (or maybe other in the future")
+parser.add_argument("--W", help="width of the network to train",
                     type=int)
-parser.add_argument("depth", help= "depth of the network to train",
+parser.add_argument("--depth", help= "depth of the network to train",
                     type=int)
-parser.add_argument("input_dim", help="size of the input, modified by PCA", type=int, default=784)
-parser.add_argument("ensemble_size", help="how many networks to average the chunks over", type=int, default=5)
-parser.add_argument("learning_rate", help="learning rate used for the network used during training", type=float, default=1e-3)
-parser.add_argument("weight_decay", help="weight decay used for the network used during training", type=float, default= 1e-3)
-parser.add_argument("N_samples", help="number of samples for each chunk size and for each network", type=int, default=10)
-parser.add_argument("signal_noise_ratio", help="only useful with artificial data", type=float, default=1.)
+parser.add_argument("--input_dim", help="size of the input, modified by PCA", type=int, default=784)
+parser.add_argument("--ensemble_size", help="how many networks to average the chunks over", type=int, default=5)
+parser.add_argument("--learning_rate", help="learning rate used for the network used during training", type=float, default=1e-3)
+parser.add_argument("--weight_decay", help="weight decay used for the network used during training", type=float, default= 1e-3)
+parser.add_argument("--N_samples", help="number of samples for each chunk size and for each network", type=int, default=10)
+parser.add_argument("--signal_noise_ratio", help="only useful with artificial data", type=float, default=1.)
+parser.add_argument("--teacher_width", help="only useful in teacher-student setup", type=int, default=4)
 
 args = parser.parse_args()
 
@@ -33,14 +35,23 @@ W=args.W
 depth=args.depth
 input_dim=args.input_dim
 number_nets=args.ensemble_size
-lr=args.learning_rate
-wd=args.weight_decay
+learning_rate=args.learning_rate
+weight_decay=args.weight_decay
 N_samples=args.N_samples
 signal_noise_ratio=args.signal_noise_ratio
+teacher_width=args.teacher_width
+
+
 if dataset=='pMNIST':
-    text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_lr_{lr}_wd_{wd}_{input_dim}_inputdim.txt', 'w')
+    text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_lr_{learning_rate}_wd_{weight_decay}_{input_dim}_inputdim.txt', 'w')
 if dataset=='XOR':
-    text_file = open(f'./logs/{dataset}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_{lr}_wd_{wd}_{input_dim}_inputdim.txt', 'w')
+    text_file = open(f'./logs/{dataset}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_'
+                     f'{learning_rate}_wd_{weight_decay}_{input_dim}_inputdim.txt', 'w')
+if dataset=='teacher':
+    text_file = open(f'./logs/{dataset}_{teacher_width}_teacherwidth_{signal_noise_ratio}_ratio_'
+                     f'{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_{input_dim}_inputdim.txt', 'w')
+
+
 criterion = nn.BCEWithLogitsLoss()
 criterion2= nn.BCELoss()
 
@@ -55,22 +66,36 @@ if dataset=='pMNIST':
     if input_dim!=784:
         testset = torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
 
+
+
 if dataset=='XOR':
-    testset = torch.load(f'./data/XOR_{input_dim}_dimension_{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
+    testset = torch.load(f'./data/{dataset}_{input_dim}_dimension_{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
+if dataset=='teacher':
+    testset = torch.load(f'./data/{dataset}_{input_dim}_dimension_'
+                         f'teacherwidth_{teacher_width}_{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
+
+
 testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset),
                                          shuffle=False, num_workers=2)
-correct = 0
+
+big_net = fully_connected_new(W, depth=depth, input_size=input_dim, output_size=1,
+                                dropout=False, batch_norm=False, orthog_init=False)
+'''correct = 0
 total = 0
 test_loss=0
 total_outputs=torch.zeros(len(testset))
-total_maj_outputs=torch.zeros(len(testset))
+total_maj_outputs=torch.zeros(len(testset))'''
 
-for i in range(0,number_nets):
+
+
+'''for i in range(0,number_nets):
     print(f'Starting test of network # {i+1}')
     if dataset=='pMNIST':
         PATH = f'./nets/pMNIST_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
     if dataset=='XOR':
         PATH=f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
+    if dataset=='teacher':
+        PATH=f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.pth'
     weights_dict = torch.load(PATH)
     big_net = fully_connected_new(W, depth=depth, input_size=input_dim, output_size=1,
                                 dropout=False, batch_norm=False, orthog_init=False)
@@ -81,13 +106,10 @@ for i in range(0,number_nets):
     with torch.no_grad():
         for data in testloader:
             images, labels = data
-            print(images)
             outputs = big_net(images.float())
-            print(outputs)
             # for predictions, one must apply a sigmoid, that the BCElogitsloss does implicitly
             predicted = torch.transpose(torch.round(torch.sigmoid(outputs)), 0, 1)
             outputs = torch.squeeze(outputs)
-            print(outputs)
             # then we add the sigmoid of outputs to the average
             total_outputs.add_(torch.sigmoid(outputs))
             total_maj_outputs.add_(torch.squeeze(predicted))
@@ -99,6 +121,9 @@ for i in range(0,number_nets):
     print(f'Accuracy of the network on the 10000 test images: {100 * correct / total} %', file=text_file)
     print(f'Loss of the network on the 10000 test images: {test_loss} ', file=text_file)
     print(f'Finished test of network # {i+1}')
+
+
+
 total_outputs_1=total_outputs/number_nets
 total_maj_outputs_1=total_maj_outputs/float(number_nets)
 correct1=0
@@ -121,8 +146,16 @@ accuracy_inf2=100*correct2/total
 accuracy_inf1=100*correct1/total
 print(f'Accuracy of the network on the 10000 test images via ensemble average: {accuracy_inf2} %', file = text_file)
 print(f'Loss of the network on the 10000 test images via ensemble average: { test_loss} ', file = text_file)
-accuracy_inf=accuracy_inf2
+accuracy_inf=accuracy_inf2'''
 
+if dataset == 'pMNIST':
+    accuracy_inf=np.load(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}.npy')
+if dataset == 'XOR':
+    accuracy_inf=np.load(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_'
+                         f'{input_dim}_lr_{learning_rate}_wd_{weight_decay}_ratio_{signal_noise_ratio}.npy')
+if dataset == 'teacher':
+    accuracy_inf=np.load(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_'
+                         f'{learning_rate}_wd_{weight_decay}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.npy', 'wb')
 #******I take N samples for each chunk size************************
 
 #*******************Array of chunk sizes*************************
@@ -131,11 +164,16 @@ sizes=list(gen(int(math.log(W,2))-1))
 
 sizes.append(sizes[-1]-sizes[-3])
 sizes.append(sizes[-3]-sizes[-5])
+if W<256 and W>=64:
+    sizes.append(sizes[-5] - sizes[-7])
+    sizes.append(sizes[-7] - sizes[-9])
 
 #for i in range(round(W/16+1),round(W/4-1)):
 #    if (i%8==0 and i!=(W/8)):
 #        sizes.append(i)
 #print(sizes)
+sizes.sort()
+sizes.append(round(sizes[-2]*0.9))
 sizes.sort()
 losses=[]
 accuracies=[]
@@ -146,10 +184,16 @@ for chunk_size in sizes:
     mean_loss=0
     accuracy_per_size=[]
     for i in range(0,number_nets):
+
         if dataset=='pMNIST':
-            PATH = f'./nets/pMNIST_trained_{depth}_layer_{W}_net_{i+1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
+            PATH = f'./nets/pMNIST_trained_{depth}_layer_{W}_net_{i+1}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}.pth'
         if dataset=='XOR':
-            PATH = f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
+            PATH = f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{learning_rate}_wd_{weight_decay}_' \
+                   f'inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
+        if dataset=='teacher':
+            PATH = f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{learning_rate}_wd_{weight_decay}_'
+            f'inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.pth'
+
         weights_dict = torch.load(PATH)
         original_tensor=weights_dict['linear_out.weight']
         for k in range(0, N_samples):
@@ -191,37 +235,48 @@ arr1 = np.array(sizes)
 arr5 = np.array(accuracies)
 acc_errors=np.array(acc_errors)
 arr5=accuracy_inf-arr5
-if arr5[-1]<0:
+while arr5[-1]<0 or arr5[-1]==0 or arr5[-1]<(1/len(testset)):
     arr5=arr5[:-1]
     arr1=arr1[:-1]
     acc_errors=acc_errors[:-1]
+
+
 if dataset=='pMNIST':
-    with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}.npy', 'wb') as f:
+    with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}.npy', 'wb') as f:
         np.save(f, arr1)
-    with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}.npy', 'wb') as f:
+    with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}.npy', 'wb') as f:
         np.save(f, arr5)
 if dataset=='XOR':
-    with open(f'./arrays/sizes_XOR_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
+    with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
         np.save(f, arr1)
-    with open(f'./arrays/error_XOR_{depth}_layer_{W}_inputdim_{input_dim}_lr_{lr}_wd_{wd}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
+    with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
         np.save(f, arr5)
+if dataset=='teacher':
+    with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
+        np.save(f, arr1)
+    with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+              f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
+        np.save(f, arr5)
+
+
 ax.errorbar(arr1, arr5,yerr=acc_errors,fmt="bo")
 ax.set_xlim([2,1.2*W])
 x = np.linspace(2,1.2*arr5[-1],1000)
 ax.set_ylim([0.8*arr5[-1],100])
-a=arr5[-1]/(arr5[-1]**(-0.5))
+a=arr5[-1]/(arr1[-1]**(-0.5))
 y=a*x**(-0.5)
 ax.plot(x,y,label='w^(-0.5)')
 ax.set_yscale('log')
 ax.set_xscale('log')
-ax.set_title(f'FCN of depth {depth}, input dimension={input_dim} and wd={wd}')
+ax.set_title(f'FCN of depth {depth}, input dimension={input_dim} and wd={weight_decay}')
 plt.xlabel('chunks width')
 plt.ylabel('$\Delta error$')
 if dataset=='pMNIST':
-    plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_wd_{wd}_inputdim_{input_dim}_error.png')
+    plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_error.png')
 if dataset=='XOR':
-    plt.savefig(f'./plots/XOR_{depth}_layer_{W}_wd_{wd}_inputdim_{input_dim}_ratio_{signal_noise_ratio}_error.png')
-
+    plt.savefig(f'./plots/XOR_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_ratio_{signal_noise_ratio}_error.png')
+if dataset=='teacher':
+    plt.savefig(f'./plots/XOR_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_error.png')
 
 
 
