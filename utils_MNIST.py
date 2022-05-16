@@ -204,16 +204,18 @@ def create_XOR_dataset(trainset_size, testset_size, input_dim,signal_noise_ratio
 def create_teacher_dataset(trainset_size, testset_size, input_dim, teacher_width, noise_ratio):
     depth=2
     sample_size=trainset_size+testset_size
-    teacher=fully_connected_new(teacher_width, depth, input_dim, output_size=1,
-                                dropout=False, batch_norm=False, orthog_init=False, gaussian_init=True)
-    inputs=torch.normal(0,1,(sample_size,round(input_dim)))
-    outputs=teacher(inputs)
-    mean=torch.mean(outputs).item()
-    std=torch.std(outputs).item()
-    labels=torch.normal(0,(std/noise_ratio),(sample_size,1))+outputs
-    labels=labels-mean
-    labels[labels<0]=0
-    labels[labels>0]=1
+    with torch.no_grad():
+        teacher=fully_connected_new(teacher_width, depth, input_dim, output_size=1,
+                                    dropout=False, batch_norm=False, orthog_init=False, gaussian_init=True)
+        inputs=torch.normal(0,1,(sample_size,round(input_dim)))
+        outputs=teacher(inputs)
+        mean=torch.mean(outputs).item()
+        std=torch.std(outputs).item()
+        labels=torch.normal(0,(std/noise_ratio),(sample_size,1))+outputs
+        labels=labels-mean
+        labels[labels<0]=0
+        labels[labels>0]=1
+        labels=torch.squeeze(labels)
     train_set = CustomDataSet(inputs[:trainset_size], labels[:trainset_size], input_dim)
     test_set = CustomDataSet(inputs[trainset_size:], labels[trainset_size:], input_dim)
     torch.save(train_set, f'./data/teacher_{input_dim}_dimension_teacherwidth_{teacher_width}_{noise_ratio}_ratio_train_{trainset_size}_samples.pt')
