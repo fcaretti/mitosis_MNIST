@@ -31,6 +31,7 @@ parser.add_argument("--sample_size", help="size of the training set, 60000 max",
 parser.add_argument("--batch_size", help="batch size during training", type=int, default=128)
 parser.add_argument("--signal_noise_ratio", help="only useful with artificial data", type=float, default=1.)
 parser.add_argument("--teacher_width", help="only useful in teacher-student setup", type=int, default=4)
+parser.add_argument("--square_edge", help="only for generalized XOR", type=int, default=3)
 
 
 args = parser.parse_args()
@@ -46,15 +47,20 @@ sample_size=args.sample_size
 batch_size=args.batch_size
 signal_noise_ratio=args.signal_noise_ratio
 teacher_width=args.teacher_width
+square_edge=args.square_edge
 
 if dataset=='pMNIST':
     text_file = open(f'./logs/MNIST_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_training_parsed.txt', 'w')
 if dataset=='XOR':
-    text_file = open(f'./logs/{dataset}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_training_parsed.txt', 'w')
+    text_file = open(f'./logs/{dataset}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_'
+                     f'inputdim_{input_dim}_training_parsed.txt', 'w')
 if dataset=='teacher':
     text_file = open(f'./logs/{dataset}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_'
                      f'{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_training_parsed.txt','w')
-
+if dataset=='generalized_XOR':
+    text_file = open(
+        f'./logs/{dataset}_{square_edge}_edge_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_'
+        f'{input_dim}_training_parsed.txt','w')
 transform = transforms.Compose(
     [transforms.ToTensor(),
      transforms.Normalize(0.5, 0.5)])
@@ -109,6 +115,12 @@ if dataset=='teacher':
         testset = torch.load(
             f'./data/{dataset}_{input_dim}_dimension_teacherwidth_{teacher_width}_{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
 
+if dataset=='generalized_XOR':
+    trainset = torch.load(f'./data/{dataset}_{square_edge}_edge_{input_dim}_dimension_{signal_noise_ratio}_ratio_'
+                          f'train_{sample_size}_samples.pt')
+    testset = torch.load(f'./data/generalized_XOR_{square_edge}_edge_{input_dim}_dimension_'
+                                              f'{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
+
 
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                           shuffle=True, num_workers=2)
@@ -147,9 +159,9 @@ for k in range(ensemble_size):
             # zero the parameter gradients
             optimizer.zero_grad()
             # forward + backward + optimize
-            if dataset=='XOR':
+            if dataset=='XOR' or dataset=='generalized_XOR':
                 outputs = big_net(inputs.float())
-            if dataset=='pMNIST':
+            if dataset=='pMNIST' or dataset=='teacher':
                 outputs=big_net(inputs)
             outputs = torch.squeeze(outputs)
             loss = criterion(outputs.to(torch.float32), labels.to(torch.float32))
@@ -180,9 +192,9 @@ for k in range(ensemble_size):
     with torch.no_grad():
         for data in trainloader2:
             images, labels = data
-            if dataset == 'XOR' or dataset =='teacher':
+            if dataset == 'XOR' or dataset =='generalized_XOR':
                 outputs = big_net(images.float())
-            if dataset == 'pMNIST':
+            if dataset == 'pMNIST' or dataset=='teacher':
                 outputs = big_net(images)
             #for predictions, one must apply a sigmoid, that the BCElogitsloss does implicitly
             predicted = torch.transpose(torch.round(torch.sigmoid(outputs)),0,1)
@@ -204,6 +216,10 @@ for k in range(ensemble_size):
     if dataset=='teacher':
         torch.save(big_net.state_dict(),f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{k + 1}_lr_{learning_rate}_wd_{weight_decay}_'
                                         f'inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.pth')
+    if dataset=='generalized_XOR':
+        torch.save(big_net.state_dict(),
+                   f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{k + 1}_lr_{learning_rate}_wd_{weight_decay}'
+                   f'_inputdim_{input_dim}_edge_{square_edge}_ratio_{signal_noise_ratio}.pth')
 
     print(f'Starting test of network # {k + 1}')
     correct = 0
@@ -262,10 +278,13 @@ if dataset == 'XOR':
     with open(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_ratio_{signal_noise_ratio}.npy',
             'wb') as f:
         np.save(f, accuracy_inf2)
-        print("Saved XOR accuracy")
 if dataset == 'teacher':
     with open(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
               f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
+        np.save(f, accuracy_inf2)
+if dataset == 'generalized_XOR':
+    with open(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+              f'edge_{square_edge}_ratio_{signal_noise_ratio}.npy','wb') as f:
         np.save(f, accuracy_inf2)
 
 #delta_error=(test_accuracies_sum-ensemble_size*accuracy_inf2)/ensemble_size
@@ -283,6 +302,11 @@ if dataset == 'teacher':
     with open(f'./deltaerrors/ensemble_deltaerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
               f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
         np.save(f, delta_error)
+if dataset == 'generalized_XOR':
+    with open(f'./deltaerrors/ensemble_deltaerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+              f'edge_{square_edge}_ratio_{signal_noise_ratio}.npy',
+            'wb') as f:
+        np.save(f, delta_error)
 
 
 fig = plt.figure()
@@ -296,9 +320,13 @@ if dataset=='XOR':
     plt.savefig(f'./training_losses_plots/{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_ratio_{signal_noise_ratio}_training_loss.png')
 if dataset=='teacher':
     plt.savefig(f'./training_losses_plots/{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_training_loss.png')
+if dataset=='generalized_XOR':
+    plt.savefig(f'./training_losses_plots/{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_'
+                f'edge_{square_edge}_ratio_{signal_noise_ratio}_training_loss.png')
+
 text_file.close()
 
 print(f'End of training of a net with the following args: dataset {dataset} width {W} depth {depth} input_dim {input_dim} '
       f'n_epochs {n_epochs} number_nets {ensemble_size} learning_rate {learning_rate} weight_decay {weight_decay} '
-      f'size_of_training_set {sample_size} batch_size {batch_size} signal_noise_ratio {signal_noise_ratio}')
+      f'size_of_training_set {sample_size} batch_size {batch_size} signal_noise_ratio {signal_noise_ratio} square_edge {square_edge} teacher_width {teacher_width}')
 
