@@ -27,6 +27,7 @@ parser.add_argument("--weight_decay", help="weight decay used for the network us
 parser.add_argument("--N_samples", help="number of samples for each chunk size and for each network", type=int, default=10)
 parser.add_argument("--signal_noise_ratio", help="only useful with artificial data", type=float, default=1.)
 parser.add_argument("--teacher_width", help="only useful in teacher-student setup", type=int, default=4)
+parser.add_argument("--square_edge", help="only for generalized XOR", type=int, default=3)
 
 args = parser.parse_args()
 
@@ -40,6 +41,7 @@ weight_decay=args.weight_decay
 N_samples=args.N_samples
 signal_noise_ratio=args.signal_noise_ratio
 teacher_width=args.teacher_width
+square_edge=args.square_edge
 
 
 if dataset=='pMNIST':
@@ -50,6 +52,9 @@ if dataset=='XOR':
 if dataset=='teacher':
     text_file = open(f'./logs/{dataset}_{teacher_width}_teacherwidth_{signal_noise_ratio}_ratio_'
                      f'{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_{input_dim}_inputdim.txt', 'w')
+if dataset=='generalized_XOR':
+    text_file = open(f'./logs/{dataset}_edge_{square_edge}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_'
+                     f'{learning_rate}_wd_{weight_decay}_{input_dim}_inputdim.txt', 'w')
 
 
 criterion = nn.BCEWithLogitsLoss()
@@ -73,6 +78,9 @@ if dataset=='XOR':
 if dataset=='teacher':
     testset = torch.load(f'./data/{dataset}_{input_dim}_dimension_'
                          f'teacherwidth_{teacher_width}_{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
+if dataset=='generalized_XOR':
+    testset = torch.load(f'./data/generalized_XOR_{square_edge}_edge_{input_dim}_dimension_'
+                         f'{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
 
 
 testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset),
@@ -155,7 +163,10 @@ if dataset == 'XOR':
                          f'{input_dim}_lr_{learning_rate}_wd_{weight_decay}_ratio_{signal_noise_ratio}.npy')
 if dataset == 'teacher':
     accuracy_inf=np.load(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_'
-                         f'{learning_rate}_wd_{weight_decay}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.npy', 'wb')
+                         f'{learning_rate}_wd_{weight_decay}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.npy')
+if dataset=='generalized_XOR':
+    accuracy_inf = np.load(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_'
+                           f'{learning_rate}_wd_{weight_decay}_edge_{square_edge}_ratio_{signal_noise_ratio}.npy')
 #******I take N samples for each chunk size************************
 
 #*******************Array of chunk sizes*************************
@@ -184,15 +195,19 @@ for chunk_size in sizes:
     mean_loss=0
     accuracy_per_size=[]
     for i in range(0,number_nets):
-
         if dataset=='pMNIST':
             PATH = f'./nets/pMNIST_trained_{depth}_layer_{W}_net_{i+1}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}.pth'
         if dataset=='XOR':
-            PATH = f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{learning_rate}_wd_{weight_decay}_' \
-                   f'inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
+            PATH = f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{learning_rate}_wd_{weight_decay}_'
+            f'inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
         if dataset=='teacher':
             PATH = f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{learning_rate}_wd_{weight_decay}_'
             f'inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.pth'
+        if dataset=='generalized_XOR':
+            PATH=f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{learning_rate}_wd_{weight_decay}'
+            f'_inputdim_{input_dim}_edge_{square_edge}_ratio_{signal_noise_ratio}.pth'
+
+
 
         weights_dict = torch.load(PATH)
         original_tensor=weights_dict['linear_out.weight']
@@ -257,6 +272,13 @@ if dataset=='teacher':
     with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
               f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
         np.save(f, arr5)
+if dataset=='generalized_XOR':
+    with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+              f'edge_{square_edge}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
+        np.save(f, arr1)
+    with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+              f'edge_{square_edge}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
+        np.save(f, arr5)
 
 
 ax.errorbar(arr1, arr5,yerr=acc_errors,fmt="bo")
@@ -272,12 +294,14 @@ ax.set_title(f'FCN of depth {depth}, input dimension={input_dim} and wd={weight_
 plt.xlabel('chunks width')
 plt.ylabel('$\Delta error$')
 if dataset=='pMNIST':
-    plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_error.png')
+    plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_error.png')
 if dataset=='XOR':
-    plt.savefig(f'./plots/XOR_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_ratio_{signal_noise_ratio}_error.png')
+    plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_ratio_{signal_noise_ratio}_error.png')
 if dataset=='teacher':
-    plt.savefig(f'./plots/XOR_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_error.png')
-
+    plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_error.png')
+if dataset=='generalized_XOR':
+    plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_'
+                f'edge_{square_edge}_ratio_{signal_noise_ratio}_error.png')
 
 
 
