@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from torch import Tensor
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
 
 
 class chunked_net(nn.Module):
@@ -144,6 +146,34 @@ def PCA_for_dataset(trainset, testset, init_dim, final_dim):
     post_PCA_train,post_PCA_test=torch.split(post_PCA_tensor,[len(trainset),len(testset)])
     return post_PCA_train,post_PCA_test,np.asarray(y_train),np.asarray(y_test)
 
+
+def sklearn_create_pMNIST_PCA_dataset(trainset, testset, init_dim, final_dim):
+    x_train, x_test,y_train,y_test= sklearn_PCA_for_dataset(trainset, testset, init_dim, final_dim)
+    train_dataset=CustomDataSet(x_train,y_train,final_dim)
+    test_dataset = CustomDataSet(x_test, y_test, final_dim)
+    #train_dataset=pMNISTDataSet(x_train,y_train,final_dim,'binary')
+    #test_dataset = pMNISTDataSet(x_test, y_test, final_dim,'binary')
+    torch.save(train_dataset, f'./data/sklearn_MNIST_PCA_{final_dim}_train.pt')
+    torch.save(test_dataset, f'./data/sklearn_MNIST_PCA_{final_dim}_test.pt')
+
+
+def sklearn_PCA_for_dataset(trainset, testset, init_dim, final_dim):
+    if final_dim >= init_dim:
+        return trainset, testset
+    x = []
+    y_train = []
+    y_test = []
+    for i in trainset:
+        x.append(torch.transpose(torch.unsqueeze(torch.flatten(torch.squeeze(i[0])), 1), 0, 1).numpy().flatten())
+        y_train.append(i[1])
+    for i in testset:
+        x.append(torch.transpose(torch.unsqueeze(torch.flatten(torch.squeeze(i[0])), 1), 0, 1).numpy().flatten())
+        y_test.append(i[1])
+
+    pca = PCA(final_dim)
+    X_pca = pca.fit_transform(x)
+    return torch.Tensor(X_pca[:len(trainset)]), torch.Tensor(X_pca[len(trainset):]), np.asarray(y_train), np.asarray(y_test)
+
 class CustomDataSet(torch.utils.data.Dataset):
     # images df, labels df, transforms
     # uses labels to determine if it needs to return X & y or just X in __getitem__
@@ -223,36 +253,25 @@ def create_teacher_dataset(trainset_size, testset_size, input_dim, teacher_width
 
 
 
-'''def PCA(trainset, testset, init_dim, final_dim):
-    if final_dim>=init_dim:
-        return trainset, testset
-    trainset = list(trainset)
-    testset=list(testset)
-    x=[]
-    y_train=[]
-    y_test=[]
-    for i in trainset:
-        x.append(torch.transpose(torch.unsqueeze(torch.flatten(torch.squeeze(i[0])), 1), 0, 1))
-        y_train.append(i[1])
-    for i in testset:
-        x.append(torch.transpose(torch.unsqueeze(torch.flatten(torch.squeeze(i[0])), 1), 0, 1))
-        y_test.append(i[1])
-    b = torch.Tensor(len(trainset)+len(testset), init_dim)
-    torch.cat(x, dim=0, out=b)
-    mean=torch.mean(b,0)
-    b = b - mean
-    max_dim=np.round(1.5*final_dim)
-    if max_dim>final_dim:
-        max_dim=final_dim
-    U, S, V = torch.pca_lowrank(b, q=max_dim, center=False, niter=4)
-    post_PCA_tensor=torch.matmul(b,V[:, :(final_dim)])
-    post_PCA_train,post_PCA_test=torch.split(post_PCA_tensor,[len(trainset),len(testset)])
-    trainset_list=[]
-    testset_list=[]
-    for i in range(len(trainset)):
-        trainset_list.append([post_PCA_train[i], y_train[i]])
-    for i in range(len(testset)):
-        testset_list.append([post_PCA_test[i],y_test[i]])
-    trainset_tuple=tuple(trainset_list)
-    testset_tuple = tuple(testset_list)
-    return trainset_tuple,testset_tuple'''
+def evaluate_on_dataset(dataset, loader, network, criterion):
+    correct = 0
+    total = 0
+    loss = 0
+    # since we're not training, we don't need to calculate the gradients for our outputs
+    with torch.no_grad():
+        for data in loader:
+            images, labels = data
+            if dataset == 'XOR' or dataset == 'generalized_XOR':
+                outputs = network(images.float())
+            if dataset == 'pMNIST' or dataset == 'teacher':
+                outputs = network(images)
+            # for predictions, one must apply a sigmoid, that the BCElogitsloss does implicitly
+            predicted = torch.transpose(torch.round(torch.sigmoid(outputs)), 0, 1)
+            outputs = torch.squeeze(outputs)
+            # then we add the sigmoid of outputs to the average
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+            # criterion is BCEwithlogits
+            loss += criterion(outputs.to(torch.float32), labels.to(torch.float32))
+
+    return 100*correct/total, loss,outputs
