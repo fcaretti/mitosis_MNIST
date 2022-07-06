@@ -10,10 +10,11 @@ import random
 from collections import OrderedDict
 import math
 import argparse
-from utils_MNIST import fully_connected_new, gen,  make_binary
+import utils_MNIST
+import saving_utils
 
 #example XOR: python pMNIST_N_chunking.py --dataset XOR --W 64 --depth 3 --input_dim 20 --ensemble_size 5 --learning_rate 1e-3 --weight_decay 1e-3 --N_samples 10 --signal_noise_ratio 1
-
+#example generalized_XOR: python pMNIST_N_chunking.py --dataset generalized_XOR --W 256 --depth 3 --input_dim 20 --ensemble_size 10 --learning_rate 1e-2 --weight_decay 5e-4 --N_samples 10 --signal_noise_ratio 1.
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", help="which dataset to use, pMNIST or XOR? (or maybe other in the future")
 parser.add_argument("--W", help="width of the network to train",
@@ -25,9 +26,12 @@ parser.add_argument("--ensemble_size", help="how many networks to average the ch
 parser.add_argument("--learning_rate", help="learning rate used for the network used during training", type=float, default=1e-3)
 parser.add_argument("--weight_decay", help="weight decay used for the network used during training", type=float, default= 1e-3)
 parser.add_argument("--N_samples", help="number of samples for each chunk size and for each network", type=int, default=10)
+parser.add_argument("--n_epochs", help="number of max epochs of training", type=int, default= 500)
 parser.add_argument("--signal_noise_ratio", help="only useful with artificial data", type=float, default=1.)
 parser.add_argument("--teacher_width", help="only useful in teacher-student setup", type=int, default=4)
 parser.add_argument("--square_edge", help="only for generalized XOR", type=int, default=3)
+parser.add_argument("--optimizer_choice", help="choice between Adam and SGD", default='SGD')
+parser.add_argument("--sample_size", help="size of the training set, 60000 max", type=int, default=10000)
 
 args = parser.parse_args()
 
@@ -42,172 +46,85 @@ N_samples=args.N_samples
 signal_noise_ratio=args.signal_noise_ratio
 teacher_width=args.teacher_width
 square_edge=args.square_edge
+optimizer_choice=args.optimizer_choice
+n_epochs=args.n_epochs
+sample_size=args.sample_size
 
 
-if dataset=='pMNIST':
-    text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_lr_{learning_rate}_wd_{weight_decay}_{input_dim}_inputdim.txt', 'w')
-if dataset=='XOR':
-    text_file = open(f'./logs/{dataset}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_'
-                     f'{learning_rate}_wd_{weight_decay}_{input_dim}_inputdim.txt', 'w')
-if dataset=='teacher':
-    text_file = open(f'./logs/{dataset}_{teacher_width}_teacherwidth_{signal_noise_ratio}_ratio_'
-                     f'{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_{input_dim}_inputdim.txt', 'w')
-if dataset=='generalized_XOR':
-    text_file = open(f'./logs/{dataset}_edge_{square_edge}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_'
-                     f'{learning_rate}_wd_{weight_decay}_{input_dim}_inputdim.txt', 'w')
+if n_epochs==500:
+    if dataset=='pMNIST':
+        text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_lr_{learning_rate}_wd_{weight_decay}_{input_dim}_{optimizer_choice}_inputdim.txt', 'w')
+    if dataset=='XOR':
+        text_file = open(f'./logs/{dataset}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_'
+                         f'{learning_rate}_wd_{weight_decay}_{input_dim}_{optimizer_choice}_inputdim.txt', 'w')
+    if dataset=='teacher':
+        text_file = open(f'./logs/{dataset}_{teacher_width}_teacherwidth_{signal_noise_ratio}_ratio_'
+                         f'{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_{input_dim}_{optimizer_choice}_inputdim.txt', 'w')
+    if dataset=='generalized_XOR':
+        text_file = open(f'./logs/{dataset}_edge_{square_edge}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_'
+                         f'{learning_rate}_wd_{weight_decay}_{input_dim}_{optimizer_choice}_inputdim.txt', 'w')
+else:
+    if dataset=='pMNIST':
+        text_file = open(f'./logs/MNIST_{depth}_layer_{W}_chunks_lr_{learning_rate}_wd_{weight_decay}_{input_dim}_{optimizer_choice}_{n_epochs}.txt', 'w')
+    if dataset=='XOR':
+        text_file = open(f'./logs/{dataset}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_'
+                         f'{learning_rate}_wd_{weight_decay}_{input_dim}_{optimizer_choice}_{n_epochs}.txt', 'w')
+    if dataset=='teacher':
+        text_file = open(f'./logs/{dataset}_{teacher_width}_teacherwidth_{signal_noise_ratio}_ratio_'
+                         f'{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_{input_dim}_{optimizer_choice}_{n_epochs}.txt', 'w')
+    if dataset=='generalized_XOR':
+        text_file = open(f'./logs/{dataset}_edge_{square_edge}_{signal_noise_ratio}_ratio_{depth}_layer_{W}_lr_'
+                         f'{learning_rate}_wd_{weight_decay}_{input_dim}_{optimizer_choice}_{n_epochs}.txt', 'w')
 
 
 criterion = nn.BCEWithLogitsLoss()
 criterion2= nn.BCELoss()
 
+transform = transforms.Compose(
+    [transforms.ToTensor(),
+     transforms.Normalize(0.5, 0.5)])
 
-if dataset=='pMNIST':
-    if input_dim==784:
-        transform = transforms.Compose(
-            [transforms.ToTensor(),
-             transforms.Normalize(0.5, 0.5)])
-        testset = torchvision.datasets.MNIST(root='./data', train=False,
-                                             download=True, transform=transform, target_transform=make_binary())
-    if input_dim!=784:
-        testset = torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')
+trainset,testset=saving_utils.dataset_loader('test',dataset, transform, input_dim, sample_size,signal_noise_ratio,teacher_width, square_edge)
 
-
-
-if dataset=='XOR':
-    testset = torch.load(f'./data/{dataset}_{input_dim}_dimension_{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
-if dataset=='teacher':
-    testset = torch.load(f'./data/{dataset}_{input_dim}_dimension_'
-                         f'teacherwidth_{teacher_width}_{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
-if dataset=='generalized_XOR':
-    testset = torch.load(f'./data/generalized_XOR_{square_edge}_edge_{input_dim}_dimension_'
-                         f'{signal_noise_ratio}_ratio_test_{10000}_samples.pt')
-
-
+trainloader2 = torch.utils.data.DataLoader(trainset, batch_size=sample_size,
+                                           shuffle=False, num_workers=2)
 testloader = torch.utils.data.DataLoader(testset, batch_size=len(testset),
                                          shuffle=False, num_workers=2)
 
-big_net = fully_connected_new(W, depth=depth, input_size=input_dim, output_size=1,
+big_net = utils_MNIST.fully_connected_new(W, depth=depth, input_size=input_dim, output_size=1,
                                 dropout=False, batch_norm=False, orthog_init=False)
-'''correct = 0
-total = 0
-test_loss=0
-total_outputs=torch.zeros(len(testset))
-total_maj_outputs=torch.zeros(len(testset))'''
 
 
+accuracy_inf=saving_utils.load_accuracy_inf(dataset,depth,W,input_dim,learning_rate,weight_decay,optimizer_choice,n_epochs,signal_noise_ratio,teacher_width,square_edge)
 
-'''for i in range(0,number_nets):
-    print(f'Starting test of network # {i+1}')
-    if dataset=='pMNIST':
-        PATH = f'./nets/pMNIST_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}.pth'
-    if dataset=='XOR':
-        PATH=f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
-    if dataset=='teacher':
-        PATH=f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{lr}_wd_{wd}_inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.pth'
-    weights_dict = torch.load(PATH)
-    big_net = fully_connected_new(W, depth=depth, input_size=input_dim, output_size=1,
-                                dropout=False, batch_norm=False, orthog_init=False)
-    big_net.load_state_dict(weights_dict)
-    correct = 0
-    total = 0
-    test_loss = 0
-    with torch.no_grad():
-        for data in testloader:
-            images, labels = data
-            outputs = big_net(images.float())
-            # for predictions, one must apply a sigmoid, that the BCElogitsloss does implicitly
-            predicted = torch.transpose(torch.round(torch.sigmoid(outputs)), 0, 1)
-            outputs = torch.squeeze(outputs)
-            # then we add the sigmoid of outputs to the average
-            total_outputs.add_(torch.sigmoid(outputs))
-            total_maj_outputs.add_(torch.squeeze(predicted))
-            # print(total_outputs)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-            # criterion is BCEwithlogits
-            test_loss += criterion(outputs.to(torch.float32), labels.to(torch.float32))
-    print(f'Accuracy of the network on the 10000 test images: {100 * correct / total} %', file=text_file)
-    print(f'Loss of the network on the 10000 test images: {test_loss} ', file=text_file)
-    print(f'Finished test of network # {i+1}')
-
-
-
-total_outputs_1=total_outputs/number_nets
-total_maj_outputs_1=total_maj_outputs/float(number_nets)
-correct1=0
-correct2=0
-test_loss=0
-total=0
-with torch.no_grad():
-    for data in testloader:
-        images, labels = data
-        # calculate outputs by running images through the network
-        # the class with the highest energy is what we choose as prediction
-        predicted1 = torch.round(total_outputs_1)
-        predicted2=torch.round(total_maj_outputs_1)
-        total += labels.size(0)
-        correct1 += (predicted1 == labels).sum().item()
-        correct2 += (predicted2 == labels).sum().item()
-        #print(total_outputs_1.to(torch.float32))
-        test_loss += criterion2(total_outputs_1.to(torch.float32), labels.to(torch.float32))
-accuracy_inf2=100*correct2/total
-accuracy_inf1=100*correct1/total
-print(f'Accuracy of the network on the 10000 test images via ensemble average: {accuracy_inf2} %', file = text_file)
-print(f'Loss of the network on the 10000 test images via ensemble average: { test_loss} ', file = text_file)
-accuracy_inf=accuracy_inf2'''
-
-if dataset == 'pMNIST':
-    accuracy_inf=np.load(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}.npy')
-if dataset == 'XOR':
-    accuracy_inf=np.load(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_'
-                         f'{input_dim}_lr_{learning_rate}_wd_{weight_decay}_ratio_{signal_noise_ratio}.npy')
-if dataset == 'teacher':
-    accuracy_inf=np.load(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_'
-                         f'{learning_rate}_wd_{weight_decay}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.npy')
-if dataset=='generalized_XOR':
-    accuracy_inf = np.load(f'./testerrors/ensemble_testerror_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_'
-                           f'{learning_rate}_wd_{weight_decay}_edge_{square_edge}_ratio_{signal_noise_ratio}.npy')
 #******I take N samples for each chunk size************************
 
 #*******************Array of chunk sizes*************************
 
-sizes=list(gen(int(math.log(W,2))-1))
+sizes=list(utils_MNIST.gen(int(math.log(W,2))-1))
 
 sizes.append(sizes[-1]-sizes[-3])
 sizes.append(sizes[-3]-sizes[-5])
-if W<256 and W>=64:
+if W<=512 and W>=64:
     sizes.append(sizes[-5] - sizes[-7])
     sizes.append(sizes[-7] - sizes[-9])
 
-#for i in range(round(W/16+1),round(W/4-1)):
-#    if (i%8==0 and i!=(W/8)):
-#        sizes.append(i)
-#print(sizes)
 sizes.sort()
 sizes.append(round(sizes[-2]*0.9))
 sizes.sort()
 losses=[]
 accuracies=[]
 acc_errors=[]
+train_accs=[]
+train_acc_errors=[]
 
 #***Iterate on chunk sizes, and take average of accuracies and losses for each chunk size***
 for chunk_size in sizes:
     mean_loss=0
     accuracy_per_size=[]
+    train_acc_per_size=[]
     for i in range(0,number_nets):
-        if dataset=='pMNIST':
-            PATH = f'./nets/pMNIST_trained_{depth}_layer_{W}_net_{i+1}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}.pth'
-        if dataset=='XOR':
-            PATH = f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{learning_rate}_wd_{weight_decay}_'
-            f'inputdim_{input_dim}_ratio_{signal_noise_ratio}.pth'
-        if dataset=='teacher':
-            PATH = f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{learning_rate}_wd_{weight_decay}_'
-            f'inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.pth'
-        if dataset=='generalized_XOR':
-            PATH=f'./nets/{dataset}_trained_{depth}_layer_{W}_net_{i + 1}_lr_{learning_rate}_wd_{weight_decay}'
-            f'_inputdim_{input_dim}_edge_{square_edge}_ratio_{signal_noise_ratio}.pth'
-
-
+        PATH=saving_utils.load_weights(dataset,depth,W,i,learning_rate,weight_decay,input_dim,optimizer_choice,n_epochs,signal_noise_ratio,teacher_width,square_edge)
 
         weights_dict = torch.load(PATH)
         original_tensor=weights_dict['linear_out.weight']
@@ -217,31 +134,30 @@ for chunk_size in sizes:
             mask=torch.t(mask.ge(0.5))
             big_net.load_state_dict(weights_dict)
             weights_dict['linear_out.weight']=original_tensor.masked_fill(mask,0)
+            train_correct=0
+            train_total = 0
             correct = 0
             total = 0
             chunk_loss=0
             # since we're not training, we don't need to calculate the gradients for our outputs
-            with torch.no_grad():
-                for data in testloader:
-                    images, labels = data
-                    # calculate outputs by running images through the network
-                    outputs = big_net(images.float())
-                    # round to zero or one for the prediction
-                    predicted=torch.transpose(torch.round(torch.sigmoid(outputs)),0,1)
-                    total += labels.size(0)
-                    correct += (predicted == labels).sum().item()
-                    outputs=torch.squeeze(outputs)
-                    chunk_loss += criterion(outputs.to(torch.float32), labels.to(torch.float32))
-
-            print(f'Chunk Size: {chunk_size} Accuracy of the network on the 10000 test images: {100 * correct / total} %', file = text_file)
+            accuracy,chunk_loss,_=utils_MNIST.evaluate_on_dataset(dataset, testloader, big_net, criterion)
+            print(f'Chunk Size: {chunk_size} Accuracy of the network on the 10000 test images: {accuracy} %', file = text_file)
             print(f'Chunk Size: {chunk_size} Loss of the network on the 10000 test images: {chunk_loss} ', file = text_file)
+            train_accuracy,_,_=utils_MNIST.evaluate_on_dataset(dataset, trainloader2, big_net, criterion)
+            print(f'Chunk Size: {chunk_size} Accuracy of the network on the 10000 train images: {train_accuracy} %', file = text_file)
             mean_loss+=chunk_loss
-            accuracy_per_size.append(100*correct/total)
+            accuracy_per_size.append(accuracy)
+            train_acc_per_size.append(train_accuracy)
+    train_mean=sum(train_acc_per_size)/len(train_acc_per_size)
     mean=sum(accuracy_per_size)/len(accuracy_per_size)
+    train_acc_errors.append(math.sqrt(sum([(number-train_mean) ** 2 for number in train_acc_per_size]))/(N_samples*number_nets-1))
     acc_errors.append(math.sqrt(sum([(number-mean) ** 2 for number in accuracy_per_size]))/(N_samples*number_nets-1))
     accuracies.append(mean)
+    train_accs.append(train_mean)
     losses.append(mean_loss/N_samples/number_nets)
     print(f'Accuracy at chunk size= {chunk_size}: {mean}')
+    print(f'Accuracy at chunk size on train set= {chunk_size}: {train_mean}')
+
 
 
 fig = plt.figure()
@@ -249,41 +165,147 @@ ax = plt.gca()
 arr1 = np.array(sizes)
 arr5 = np.array(accuracies)
 acc_errors=np.array(acc_errors)
+train_accs=np.array(train_accs)
+train_acc_errors=np.array(train_acc_errors)
 arr5=accuracy_inf-arr5
+
 while arr5[-1]<0 or arr5[-1]==0 or arr5[-1]<(1/len(testset)):
     arr5=arr5[:-1]
     arr1=arr1[:-1]
     acc_errors=acc_errors[:-1]
 
-
-if dataset=='pMNIST':
-    with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}.npy', 'wb') as f:
-        np.save(f, arr1)
-    with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}.npy', 'wb') as f:
-        np.save(f, arr5)
-if dataset=='XOR':
-    with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
-        np.save(f, arr1)
-    with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
-        np.save(f, arr5)
-if dataset=='teacher':
-    with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
-        np.save(f, arr1)
-    with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
-              f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
-        np.save(f, arr5)
-if dataset=='generalized_XOR':
-    with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
-              f'edge_{square_edge}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
-        np.save(f, arr1)
-    with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
-              f'edge_{square_edge}_ratio_{signal_noise_ratio}.npy', 'wb') as f:
-        np.save(f, arr5)
+'''if n_epochs==500:
+    if dataset=='pMNIST':
+        with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, arr1)
+        with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, arr5)
+        with open(f'./arrays/error_on_error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, acc_errors)
+        with open(f'./arrays/train_error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, train_accs)
+        with open(f'./arrays/train_acc_error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, train_acc_errors)
+    if dataset=='XOR':
+        with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, arr1)
+        with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, arr5)
+        with open(f'./arrays/error_on_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, acc_errors)
+        with open(f'./arrays/train_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, train_accs)
+        with open(f'./arrays/train_acc_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, train_acc_errors)
+    if dataset=='teacher':
+        with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, arr1)
+        with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, arr5)
+        with open(f'./arrays/error_on_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_'
+                  f'{weight_decay}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, acc_errors)
+        with open(f'./arrays/train_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_'
+                  f'{weight_decay}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, train_accs)
+        with open(f'./arrays/train_acc_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_'
+                  f'{weight_decay}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, train_acc_errors)
+    if dataset=='generalized_XOR':
+        with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, arr1)
+        with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, arr5)
+        with open(f'./arrays/error_on_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, acc_errors)
+        with open(f'./arrays/train_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, train_accs)
+        with open(f'./arrays/tran_acc_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}.npy', 'wb') as f:
+            np.save(f, train_acc_errors)
+else:
+    if dataset=='pMNIST':
+        with open(f'./arrays/sizes_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, arr1)
+        with open(f'./arrays/error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, arr5)
+        with open(f'./arrays/error_on_error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, acc_errors)
+        with open(f'./arrays/train_error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, train_accs)
+        with open(f'./arrays/train_acc_error_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, train_acc_errors)
+    if dataset=='XOR':
+        with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, arr1)
+        with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, arr5)
+        with open(f'./arrays/error_on_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, acc_errors)
+        with open(f'./arrays/train_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, train_accs)
+        with open(f'./arrays/train_acc_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, train_acc_errors)
+    if dataset=='teacher':
+        with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, arr1)
+        with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, arr5)
+        with open(f'./arrays/error_on_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, acc_errors)
+        with open(f'./arrays/train_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, train_accs)
+        with open(f'./arrays/train_acc_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, train_acc_errors)
+    if dataset=='generalized_XOR':
+        with open(f'./arrays/sizes_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, arr1)
+        with open(f'./arrays/error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, arr5)
+        with open(f'./arrays/error_on_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, acc_errors)
+        with open(f'./arrays/train_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, train_accs)
+        with open(f'./arrays/train_acc_error_{dataset}_{depth}_layer_{W}_inputdim_{input_dim}_lr_{learning_rate}_wd_{weight_decay}_'
+                  f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}.npy', 'wb') as f:
+            np.save(f, train_acc_errors)'''
+saving_utils.save_all_arrays(dataset,n_epochs,depth,W,input_dim,learning_rate,weight_decay,optimizer_choice,arr1,arr5,acc_errors,
+                    train_accs,train_acc_errors,signal_noise_ratio,teacher_width,square_edge)
 
 
 ax.errorbar(arr1, arr5,yerr=acc_errors,fmt="bo")
 ax.set_xlim([2,1.2*W])
-x = np.linspace(2,1.2*arr5[-1],1000)
+x = np.linspace(2,1.2*arr1[-1],1000)
 ax.set_ylim([0.8*arr5[-1],100])
 a=arr5[-1]/(arr1[-1]**(-0.5))
 y=a*x**(-0.5)
@@ -294,68 +316,27 @@ ax.set_title(f'FCN of depth {depth}, input dimension={input_dim} and wd={weight_
 plt.xlabel('chunks width')
 plt.ylabel('$\Delta error$')
 if dataset=='pMNIST':
-    plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_error.png')
+    plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_{optimizer_choice}_{n_epochs}_error.png')
 if dataset=='XOR':
-    plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_ratio_{signal_noise_ratio}_error.png')
+    plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_'
+                f'ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}_error.png')
 if dataset=='teacher':
-    plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_error.png')
+    plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_'
+                f'teacherwidth_{teacher_width}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}_error.png')
 if dataset=='generalized_XOR':
     plt.savefig(f'./plots/{dataset}_{depth}_layer_{W}_lr_{learning_rate}_wd_{weight_decay}_inputdim_{input_dim}_'
-                f'edge_{square_edge}_ratio_{signal_noise_ratio}_error.png')
+                f'edge_{square_edge}_ratio_{signal_noise_ratio}_{optimizer_choice}_{n_epochs}_error.png')
+
+
+#ax.errorbar(arr1, train_accs,yerr=train_acc_errors,fmt="bo")
+saving_utils.save_train_acc(arr1, train_accs, train_acc_errors, dataset, depth, W, input_dim, weight_decay, learning_rate,
+                            optimizer_choice, n_epochs, signal_noise_ratio, teacher_width, square_edge)
 
 
 
 
 
 
-'''text_file.close()
-fig = plt.figure()
-ax = plt.gca()
-arr2 = np.array(losses)
-test_loss=float(test_loss)
-arr2+=(-test_loss)
-ax.scatter(arr1, arr2, label='chunks loss')
-x = np.linspace(1,1.5*W,1000)
-a=arr2[-1]/(W**(-0.5))
-y=a*x**(-0.5)
-ax.plot(x,y,label='w^(-0.5)')
-ax.set_yscale('log')
-ax.set_xscale('log')
-ax.set_xlim([2,1.5*W])
-ax.set_ylim([0.8*arr2[-1],1.2*arr2[0]])
-plt.xlabel('chunks width')
-plt.ylabel('cross-entropy loss - loss at inf')
-ax.legend()
-plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_loss.png')'''
 
-'''fig = plt.figure()
-ax = plt.gca()
-arr1 = np.array(sizes)
-arr3 = np.array(losses)
-#test_loss=float(test_loss)
-#arr2+=(-test_loss/total)
-ax.scatter(arr1, arr3, label='chunks loss')
-x = np.linspace(1,1.5*W,1000)
-a=arr3[-1]/(W**(-0.5))
-y=a*x**(-0.5)
-ax.plot(x,y,label='w^(-0.5)')
-ax.set_yscale('log')
-ax.set_xscale('log')
-ax.set_xlim([2,1.5*W])
-ax.set_ylim([0.8*arr3[-1],1.2*arr3[0]])
-plt.xlabel('chunks width')
-plt.ylabel('binary cross-entropy loss ')
-ax.legend()
-plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_not_norm_loss.png')
-'''
-'''fig = plt.figure()
-ax = plt.gca()
-arr4 = np.array(accuracies)
-ax.scatter(arr1, arr4)
-ax.set_xlim([2,1.2*W])
-ax.set_ylim([0,100])
-plt.xlabel('chunks width')
-plt.ylabel('accuracy')
-plt.savefig(f'./plots/pMNIST_{depth}_layer_{W}_acc.png')'''
 
 
