@@ -95,9 +95,9 @@ def dataset_loader(trainortest,dataset, transform, input_dim, sample_size,signal
                      transforms.Normalize(0.5, 0.5)])
                 trainset = torchvision.datasets.MNIST(root='./data', train=True,
                                                       download=True, transform=transform,
-                                                      target_transform=make_binary())
+                                                      target_transform=utils_MNIST.make_binary())
                 testset = torchvision.datasets.MNIST(root='./data', train=False,
-                                                     download=True, transform=transform, target_transform=make_binary())
+                                                     download=True, transform=transform, target_transform=utils_MNIST.make_binary())
             if input_dim != 784:
                 trainset = torch.load(f'./data/MNIST_PCA_{input_dim}_train.pt')
                 testset = torch.load(f'./data/MNIST_PCA_{input_dim}_test.pt')

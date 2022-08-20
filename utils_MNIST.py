@@ -143,6 +143,9 @@ def PCA_for_dataset(trainset, testset, init_dim, final_dim):
         max_dim=final_dim
     U, S, V = torch.pca_lowrank(b, q=max_dim, center=False, niter=4)
     post_PCA_tensor=torch.matmul(b,V[:, :(final_dim)])
+    std=torch.std(post_PCA_tensor)
+    mean=torch.mean(post_PCA_tensor)
+    post_PCA_tensor=(post_PCA_tensor-mean)/std
     post_PCA_train,post_PCA_test=torch.split(post_PCA_tensor,[len(trainset),len(testset)])
     return post_PCA_train,post_PCA_test,np.asarray(y_train),np.asarray(y_test)
 
@@ -170,8 +173,11 @@ def sklearn_PCA_for_dataset(trainset, testset, init_dim, final_dim):
         x.append(torch.transpose(torch.unsqueeze(torch.flatten(torch.squeeze(i[0])), 1), 0, 1).numpy().flatten())
         y_test.append(i[1])
 
-    pca = PCA(final_dim)
-    X_pca = pca.fit_transform(x)
+    #pca = PCA(final_dim)
+    #X_pca = pca.fit_transform(x)
+    pca=PCA(init_dim-1)
+    X_pca=pca.fit_transform(x)[:,:final_dim]
+    X_pca=2*X_pca/(X_pca.max()-X_pca.min())
     return torch.Tensor(X_pca[:len(trainset)]), torch.Tensor(X_pca[len(trainset):]), np.asarray(y_train), np.asarray(y_test)
 
 class CustomDataSet(torch.utils.data.Dataset):
