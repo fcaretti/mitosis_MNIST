@@ -116,8 +116,10 @@ train_acc_errors=[]
 #***Iterate on chunk sizes, and take average of accuracies and losses for each chunk size***
 for chunk_size in sizes:
     mean_loss=0
-    accuracy_per_size=[]
-    train_acc_per_size=[]
+    accuracy_per_net=[]
+    train_acc_per_net=[]
+    error_per_net=[]
+    train_error_per_net=[]
     for i in range(0,number_nets):
         PATH=saving_utils.load_weights(dataset,depth,W,i,learning_rate,weight_decay,input_dim,optimizer_choice,n_epochs,signal_noise_ratio,teacher_width,square_edge)
         weights_dict = torch.load(PATH)
@@ -142,17 +144,52 @@ for chunk_size in sizes:
             train_accuracy,_,_=utils_MNIST.evaluate_on_dataset(dataset, trainloader2, big_net, criterion)
             print(f'Chunk Size: {chunk_size} Accuracy of the network on the 10000 train images: {train_accuracy} %', file = text_file)
             mean_loss+=chunk_loss
-            accuracy_per_size.append(accuracy)
-            train_acc_per_size.append(train_accuracy)
-    train_mean=sum(train_acc_per_size)/len(train_acc_per_size)
-    mean=sum(accuracy_per_size)/len(accuracy_per_size)
-    train_acc_errors.append(math.sqrt(sum([(number-train_mean) ** 2 for number in train_acc_per_size]))/(N_samples*number_nets-1))
-    acc_errors.append(math.sqrt(sum([(number-mean) ** 2 for number in accuracy_per_size]))/(N_samples*number_nets-1))
-    accuracies.append(mean)
-    train_accs.append(train_mean)
+            accuracies_of_net.append(accuracy)
+            train_acc_of_net.append(train_accuracy)
+            #accuracy_per_size.append(accuracy)
+            #train_acc_per_size.append(train_accuracy)
+        mean_net=sum(accuracies_of_net)/len(accuracies_of_net)
+        accuracy_per_net.append(mean_net)
+        error_to_append=math.sqrt(sum([(number-mean_net) ** 2 for number in accuracies_of_net]))/(N_samples-1)
+        if error_to_append==0:
+            error_to_append=1/sample_size
+        error_per_net.append(error_to_append)
+
+        train_mean_net = sum(train_acc_of_net) / len(train_acc_of_net)
+        train_acc_per_net.append(train_mean_net)
+        train_error_to_append=math.sqrt(sum([(number - mean_net) ** 2 for number in accuracies_of_net])) / (N_samples - 1)
+        if train_error_to_append==0:
+            train_error_to_append=1/sample_size
+        train_error_per_net.append(train_error_to_append)
+
+    weights=1/np.array(error_per_net)**2
+    weighted_avg=0
+    for i in range(number_nets):
+        weighted_avg+=weights[i]*accuracy_per_net[i]
+    weighted_avg=weighted_avg/sum(weights)
+    std=0
+    for i in range(number_nets):
+        std+=weights[i]*(accuracy_per_net[i]-weighted_avg)**2
+    std=np.sqrt(std/(number_nets-1)/sum(weights))
+    acc_errors.append(std)
+    accuracies.append(weighted_avg)
+
+    train_weights = 1 / np.array(train_error_per_net) ** 2
+    train_weighted_avg = 0
+    for i in range(number_nets):
+        train_weighted_avg += train_weights[i] * train_acc_per_net[i]
+    train_weighted_avg = train_weighted_avg / sum(train_weights)
+    train_std = 0
+    for i in range(number_nets):
+        train_std += train_weights[i] * (train_acc_per_net[i] - train_weighted_avg)**2
+    train_std = np.sqrt(train_std / (number_nets- 1) / sum(train_weights))
+    train_acc_errors.append(train_std)
+    train_accs.append(train_weighted_avg)
+
+
     losses.append(mean_loss/N_samples/number_nets)
-    print(f'Accuracy at chunk size= {chunk_size}: {mean}')
-    print(f'Accuracy at chunk size on train set= {chunk_size}: {train_mean}')
+    print(f'Accuracy at chunk size= {chunk_size}: {weighted_avg}')
+    print(f'Accuracy at chunk size on train set= {chunk_size}: {train_weighted_avg}')
 
 
 

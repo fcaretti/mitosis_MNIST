@@ -145,7 +145,8 @@ def PCA_for_dataset(trainset, testset, init_dim, final_dim):
     post_PCA_tensor=torch.matmul(b,V[:, :(final_dim)])
     std=torch.std(post_PCA_tensor)
     mean=torch.mean(post_PCA_tensor)
-    post_PCA_tensor=(post_PCA_tensor-mean)/std
+    #post_PCA_tensor=(post_PCA_tensor-mean)/std
+    post_PCA_tensor=2*post_PCA_tensor/(post_PCA_tensor.max()-post_PCA_tensor.min())
     post_PCA_train,post_PCA_test=torch.split(post_PCA_tensor,[len(trainset),len(testset)])
     return post_PCA_train,post_PCA_test,np.asarray(y_train),np.asarray(y_test)
 
@@ -156,8 +157,8 @@ def sklearn_create_pMNIST_PCA_dataset(trainset, testset, init_dim, final_dim):
     test_dataset = CustomDataSet(x_test, y_test, final_dim)
     #train_dataset=pMNISTDataSet(x_train,y_train,final_dim,'binary')
     #test_dataset = pMNISTDataSet(x_test, y_test, final_dim,'binary')
-    torch.save(train_dataset, f'./data/sklearn_MNIST_PCA_{final_dim}_train.pt')
-    torch.save(test_dataset, f'./data/sklearn_MNIST_PCA_{final_dim}_test.pt')
+    torch.save(train_dataset, f'./data/MNIST_PCA_{final_dim}_train.pt')
+    torch.save(test_dataset, f'./data/MNIST_PCA_{final_dim}_test.pt')
 
 
 def sklearn_PCA_for_dataset(trainset, testset, init_dim, final_dim):

@@ -29,7 +29,7 @@ parser.add_argument("--ensemble_size", help="how many networks to train to evalu
 parser.add_argument("--learning_rate", help="learning rate", type=float, default=1e-3)
 parser.add_argument("--weight_decay",help="weight decay", type=float, default=1e-3)
 parser.add_argument("--sample_size", help="size of the training set, 60000 max", type=int, default=10000)
-parser.add_argument("--batch_size", help="batch size during training", type=int, default=128)
+parser.add_argument("--batch_size", help="batch size during training", type=int, default=64)
 parser.add_argument("--signal_noise_ratio", help="only useful with artificial data", type=float, default=1.)
 parser.add_argument("--teacher_width", help="only useful in teacher-student setup", type=int, default=4)
 parser.add_argument("--square_edge", help="only for generalized XOR", type=int, default=3)
@@ -59,7 +59,7 @@ text_file=saving_utils.open_text_file(dataset,depth,W,learning_rate,weight_decay
 
 transform = transforms.Compose(
     [transforms.ToTensor(),
-     transforms.Normalize(0.5, 0.5)])
+     transforms.Normalize((0.1307,),(0.3081))])
 
 
 
@@ -96,10 +96,11 @@ for k in range(ensemble_size):
     still_training=0
     epoch=0
     #for epoch in range(args.n_epochs):  # loop over the dataset multiple times
-    while still_training<500 and epoch<n_epochs:
+    while still_training<200 and epoch<n_epochs:
         epoch+=1
         running_loss = 0.0
         correct=0
+        actual_sample_size=0
         for i, data in enumerate(trainloader, 0):
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data
@@ -118,10 +119,12 @@ for k in range(ensemble_size):
             optimizer.step()
             # print statistics
             running_loss += loss.item()
+            actual_sample_size+=labels.size(0)
         if optimizer_choice=='SGD':
             scheduler.step()
         running_loss=running_loss/sample_size
-        correct=correct/sample_size
+        #correct=correct/float(sample_size)
+        correct=correct/float(actual_sample_size)
         print(f'[{epoch + 1}] loss: {running_loss :.3f}', file=text_file)
         print(f'[{epoch + 1}] accuracy: {100 * correct :.3f}%', file=text_file)
         if (epoch+1)%100==0:
